@@ -118,8 +118,8 @@ act-secrets:
 	@if [ -f $(ACT_SECRETS) ]; then \
 	  echo "$(ACT_SECRETS) already exists — edit it to update your token"; \
 	else \
-	  printf 'GITHUB_TOKEN=ghp_yourtoken\n' > $(ACT_SECRETS) && \
-	  echo "Created $(ACT_SECRETS) — replace ghp_yourtoken with a real token"; \
+	  printf 'GITHUB_TOKEN=replace-with-your-token\n' > $(ACT_SECRETS) && \
+	  echo "Created $(ACT_SECRETS) — replace the placeholder with a real token"; \
 	fi
 
 ci-list:
