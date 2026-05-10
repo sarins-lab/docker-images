@@ -36,12 +36,12 @@ Run the **Deploy Container Releases** workflow from GitHub Actions and provide t
 
 All image tracks are declared in [`versions.yml`](versions.yml). The CI workflow reads that file to generate its build matrix — **edit `versions.yml`, not the workflow, when adding, updating, or sunsetting tracks**.
 
-| Status | Meaning |
-|--------|---------|
-| `active` | Newest release of this OS line; actively developed |
-| `maintained` | Older release still receiving security patches; still published |
-| `deprecated` | EOL approaching; users should migrate; still published but flagged in release notes |
-| `eol` | Past end-of-life; CI stops building; existing GHCR packages remain but receive no new versions |
+| Status       | Meaning                                                                                        |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| `active`     | Newest release of this OS line; actively developed                                             |
+| `maintained` | Older release still receiving security patches; still published                                |
+| `deprecated` | EOL approaching; users should migrate; still published but flagged in release notes            |
+| `eol`        | Past end-of-life; CI stops building; existing GHCR packages remain but receive no new versions |
 
 ### Sunsetting a track
 
@@ -60,16 +60,16 @@ Published format: `ghcr.io/<owner>/<image-title>:<version>-<track-suffix>`
 
 Current tracks (see `versions.yml` for lifecycle status and EOL dates):
 
-| Track | Image |
-|-------|-------|
-| `alpine321` | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine321` |
-| `alpine322` | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine322` |
-| `rocky9` | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky9` |
-| `rocky10` | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky10` |
-| `debian12` | `ghcr.io/<owner>/hardened-debian-base:<version>-debian12` |
-| `debian13` | `ghcr.io/<owner>/hardened-debian-base:<version>-debian13` |
-| `ubuntu24` | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu24` |
-| `ubuntu26` | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu26` |
-| `init-tools` | `ghcr.io/<owner>/platform-init-tools:<version>` |
+| Track        | Image                                                      |
+| ------------ | ---------------------------------------------------------- |
+| `alpine321`  | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine321` |
+| `alpine322`  | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine322` |
+| `rocky9`     | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky9`     |
+| `rocky10`    | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky10`    |
+| `debian12`   | `ghcr.io/<owner>/hardened-debian-base:<version>-debian12`  |
+| `debian13`   | `ghcr.io/<owner>/hardened-debian-base:<version>-debian13`  |
+| `ubuntu24`   | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu24`  |
+| `ubuntu26`   | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu26`  |
+| `init-tools` | `ghcr.io/<owner>/platform-init-tools:<version>`            |
 
 Both `v<version>` and `<version>` tag forms are published for each track.
