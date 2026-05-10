@@ -1,0 +1,7 @@
+name: docker-images-codeql
+
+queries:
+  - uses: security-extended
+
+paths:
+  - .github/workflows

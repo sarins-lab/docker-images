@@ -1,0 +1,593 @@
+name: Deploy Container Releases
+
+on:
+    push:
+        tags:
+            - "v*"
+    pull_request:
+        branches:
+            - main
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Release version (example: v1.0.0)"
+                required: true
+                type: string
+
+# Minimal permissions at workflow level; each job elevates only what it needs.
+permissions:
+    contents: read
+    pull-requests: read
+
+env:
+    REGISTRY: ghcr.io
+
+# ── SHA-pinned action references ──────────────────────────────────────────────
+# All third-party actions are pinned to an immutable commit SHA so that a
+# compromised version tag cannot inject malicious code into jobs that hold
+# packages:write or contents:write.  To update, resolve the new SHA with:
+#   gh api /repos/<owner>/<repo>/git/ref/tags/<tag> --jq '.object.sha'
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+    # ── Metadata ─────────────────────────────────────────────────────────────────
+    prepare:
+        name: Prepare Release Metadata
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.meta.outputs.version }}
+            version_no_v: ${{ steps.meta.outputs.version_no_v }}
+            owner_lower: ${{ steps.meta.outputs.owner_lower }}
+        steps:
+            - name: Compute release metadata
+              id: meta
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                    version="${{ inputs.version }}"
+                  elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+                    version="v0.0.0-pr-${{ github.event.pull_request.number }}"
+                  else
+                    version="${GITHUB_REF_NAME}"
+                  fi
+
+                  # Strict semver: vMAJOR.MINOR.PATCH with optional pre-release segment.
+                  # Rejects arbitrary strings that only start with 'v'.
+                  if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+                    echo "ERROR: version must be vMAJOR.MINOR.PATCH[-prerelease] (got: ${version})" >&2
+                    exit 1
+                  fi
+
+                  owner_lower="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+                  version_no_v="${version#v}"
+
+                  echo "version=${version}"           >> "$GITHUB_OUTPUT"
+                  echo "version_no_v=${version_no_v}" >> "$GITHUB_OUTPUT"
+                  echo "owner_lower=${owner_lower}"   >> "$GITHUB_OUTPUT"
+
+    # ── Matrix generation ─────────────────────────────────────────────────────────
+    # Reads versions.yml and emits JSON matrices consumed by publish-base,
+    # publish-tools, and scan. Runs in parallel with prepare.
+    generate-matrix:
+        name: Generate Build Matrices
+        runs-on: ubuntu-latest
+        outputs:
+            base-matrix: ${{ steps.gen.outputs.base-matrix }}
+            tools-matrix: ${{ steps.gen.outputs.tools-matrix }}
+            scan-matrix: ${{ steps.gen.outputs.scan-matrix }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Install Python dependencies
+              run: python3 -m pip install --disable-pip-version-check pyyaml
+
+            - name: Read versions.yml and emit matrices
+              id: gen
+              run: |
+                  python3 - << 'PYEOF'
+                  import yaml, json, os, sys, re
+
+                  with open('versions.yml') as f:
+                      v = yaml.safe_load(f)
+
+                  # Validate that every tool track's base-suffix references a non-eol base.
+                  live_bases = {t['suffix']: t for t in v['base-tracks'] if t['status'] != 'eol'}
+                  live_suffixes = set(live_bases)
+                  for t in v['tool-tracks']:
+                      if t['status'] != 'eol' and t['base-suffix'] not in live_suffixes:
+                          print(
+                              f"ERROR: tool track '{t['track']}' references base-suffix "
+                              f"'{t['base-suffix']}' which is not a live base track.\n"
+                              f"Live suffixes: {sorted(live_suffixes)}",
+                              file=sys.stderr,
+                          )
+                          sys.exit(1)
+                      if t['status'] != 'eol':
+                          base_platforms = set(live_bases[t['base-suffix']]['platforms'].split(','))
+                          tool_platforms = set(t['platforms'].split(','))
+                          unsupported = sorted(tool_platforms - base_platforms)
+                          if unsupported:
+                              print(
+                                  f"ERROR: tool track '{t['track']}' requests platforms not published "
+                                  f"by base-suffix '{t['base-suffix']}': {unsupported}",
+                                  file=sys.stderr,
+                              )
+                              sys.exit(1)
+
+                  def image_name_from_file(path):
+                      with open(path) as f:
+                          for line in f:
+                              m = re.match(r'^LABEL\s+org\.opencontainers\.image\.title="([^"]+)"', line)
+                              if m:
+                                  return re.sub(r'[^a-z0-9._-]', '-', m.group(1).lower())
+                      raise ValueError(f'No org.opencontainers.image.title in {path}')
+
+                  name_cache = {}
+                  def cached_name(dockerfile):
+                      if dockerfile not in name_cache:
+                          name_cache[dockerfile] = image_name_from_file(dockerfile)
+                      return name_cache[dockerfile]
+
+                  base = [
+                      {
+                          'track':      t['suffix'],
+                          'dockerfile': t['dockerfile'],
+                          'build_args': t['build-arg'],
+                          'platforms':  t['platforms'],
+                          'tag_suffix': t['suffix'],
+                          'status':     t['status'],
+                      }
+                      for t in v['base-tracks']
+                      if t['status'] != 'eol'
+                  ]
+
+                  tools = [
+                      {
+                          'track':       t['track'],
+                          'dockerfile':  t['dockerfile'],
+                          'tag_suffix':  t.get('tag-suffix', ''),
+                          'base_image':  t['base-image'],
+                          'base_suffix': t['base-suffix'],
+                          'platforms':   t['platforms'],
+                          'status':      t['status'],
+                      }
+                      for t in v['tool-tracks']
+                      if t['status'] != 'eol'
+                  ]
+
+                  # Scan matrix — one entry per live image. image_name pre-resolved
+                  # so each scan job can reconstruct the full registry ref from prepare outputs.
+                  scan = []
+                  for t in v['base-tracks']:
+                      if t['status'] == 'eol':
+                          continue
+                      scan.append({
+                          'track':      t['suffix'],
+                          'image_name': cached_name(t['dockerfile']),
+                          'tag_suffix': t['suffix'],
+                      })
+                  for t in v['tool-tracks']:
+                      if t['status'] == 'eol':
+                          continue
+                      scan.append({
+                          'track':      t['track'],
+                          'image_name': cached_name(t['dockerfile']),
+                          'tag_suffix': t.get('tag-suffix', ''),
+                      })
+
+                  with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+                      out.write(f"base-matrix={json.dumps({'include': base})}\n")
+                      out.write(f"tools-matrix={json.dumps({'include': tools})}\n")
+                      out.write(f"scan-matrix={json.dumps({'include': scan})}\n")
+                  PYEOF
+
+    # ── Base images ───────────────────────────────────────────────────────────────
+    # Matrix is driven entirely by versions.yml — add/remove/sunset tracks there.
+    publish-base:
+        name: Publish base / ${{ matrix.track }}
+        runs-on: ubuntu-latest
+        needs: [prepare, generate-matrix]
+        permissions:
+            packages: write
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.generate-matrix.outputs.base-matrix) }}
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Set up QEMU
+              uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+
+            - name: Login to GHCR
+              uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Resolve image name from OCI title label
+              id: image_name
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  title="$(sed -n 's/^LABEL[[:space:]]\+org.opencontainers.image.title="\([^"]\+\)".*/\1/p' \
+                    "${{ matrix.dockerfile }}" | head -n 1)"
+                  if [[ -z "$title" ]]; then
+                    echo "Could not find org.opencontainers.image.title in ${{ matrix.dockerfile }}" >&2
+                    exit 1
+                  fi
+                  image_name="$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
+                  echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
+
+            - name: Prepare tags
+              id: tags
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  image="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ steps.image_name.outputs.image_name }}"
+                  version="${{ needs.prepare.outputs.version }}"
+                  version_no_v="${{ needs.prepare.outputs.version_no_v }}"
+                  suffix="${{ matrix.tag_suffix }}"
+                  {
+                    echo "tags<<EOF"
+                    echo "${image}:${version}-${suffix}"
+                    echo "${image}:${version_no_v}-${suffix}"
+                    echo "EOF"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Build and push
+              uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+              with:
+                  context: .
+                  file: ${{ matrix.dockerfile }}
+                  platforms: ${{ matrix.platforms }}
+                  push: ${{ github.event_name != 'pull_request' }}
+                  provenance: false
+                  tags: ${{ steps.tags.outputs.tags }}
+                  build-args: ${{ matrix.build_args }}
+                  labels: |
+                      org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+                      org.opencontainers.image.version=${{ needs.prepare.outputs.version_no_v }}
+
+    # ── Tool images ───────────────────────────────────────────────────────────────
+    # Tool images layer on top of a published base image and must run after
+    # publish-base. BASE_IMAGE is a fully-qualified registry reference so that
+    # multi-arch buildx builds can pull it from GHCR rather than looking locally.
+    publish-tools:
+        name: Publish tool / ${{ matrix.track }}
+        runs-on: ubuntu-latest
+        needs: [prepare, generate-matrix, publish-base]
+        permissions:
+            packages: write
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.generate-matrix.outputs.tools-matrix) }}
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Set up QEMU
+              uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
+
+            - name: Login to GHCR
+              uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Resolve image name from OCI title label
+              id: image_name
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  title="$(sed -n 's/^LABEL[[:space:]]\+org.opencontainers.image.title="\([^"]\+\)".*/\1/p' \
+                    "${{ matrix.dockerfile }}" | head -n 1)"
+                  if [[ -z "$title" ]]; then
+                    echo "Could not find org.opencontainers.image.title in ${{ matrix.dockerfile }}" >&2
+                    exit 1
+                  fi
+                  image_name="$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
+                  echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
+
+            - name: Prepare tags
+              id: tags
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  image="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ steps.image_name.outputs.image_name }}"
+                  version="${{ needs.prepare.outputs.version }}"
+                  version_no_v="${{ needs.prepare.outputs.version_no_v }}"
+                  sha_tag="sha-${GITHUB_SHA:0:12}"
+                  suffix="${{ matrix.tag_suffix }}"
+                  if [[ -n "$suffix" ]]; then
+                    {
+                      echo "tags<<EOF"
+                      echo "${image}:${version}-${suffix}"
+                      echo "${image}:${version_no_v}-${suffix}"
+                      echo "${image}:${sha_tag}-${suffix}"
+                      echo "EOF"
+                    } >> "$GITHUB_OUTPUT"
+                  else
+                    {
+                      echo "tags<<EOF"
+                      echo "${image}:${version}"
+                      echo "${image}:${version_no_v}"
+                      echo "${image}:${sha_tag}"
+                      echo "EOF"
+                    } >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Build and push
+              uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
+              with:
+                  context: .
+                  file: ${{ matrix.dockerfile }}
+                  platforms: ${{ matrix.platforms }}
+                  push: ${{ github.event_name != 'pull_request' }}
+                  provenance: false
+                  tags: ${{ steps.tags.outputs.tags }}
+                  build-args: |
+                      BASE_IMAGE=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.base_suffix }}
+                  labels: |
+                      org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+                      org.opencontainers.image.version=${{ needs.prepare.outputs.version_no_v }}
+                      org.opencontainers.image.base.name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.base_suffix }}
+
+    # ── CVE scanning ─────────────────────────────────────────────────────────────
+    # One matrix job per published image — each uses aquasecurity/trivy-action to
+    # scan for HIGH/CRITICAL unfixed CVEs and upload a SARIF file to the Security
+    # tab. fail-fast:false ensures all images are scanned even if one fails.
+    # The overall matrix result is 'failure' if any single image scan fails.
+    #
+    # To accept a known risk add the CVE ID to .trivyignore at the repo root with
+    # a justification comment.
+    scan:
+        name: Scan / ${{ matrix.track }}
+        runs-on: ubuntu-latest
+        needs: [prepare, generate-matrix, publish-base, publish-tools]
+        if: github.event_name != 'pull_request'
+        permissions:
+            packages: read # pull published images from GHCR
+            security-events: write # upload SARIF to GitHub Security tab
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJSON(needs.generate-matrix.outputs.scan-matrix) }}
+
+        steps:
+            - name: Login to GHCR
+              uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Resolve image reference
+              id: ref
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  suffix="${{ matrix.tag_suffix }}"
+                  base="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.image_name }}"
+                  ver="${{ needs.prepare.outputs.version_no_v }}"
+                  if [[ -n "${suffix}" ]]; then
+                    echo "image=${base}:${ver}-${suffix}" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "image=${base}:${ver}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Scan image with Trivy
+              uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.36.0
+              with:
+                  image-ref: ${{ steps.ref.outputs.image }}
+                  scan-type: image
+                  format: sarif
+                  output: trivy.sarif
+                  severity: HIGH,CRITICAL
+                  ignore-unfixed: true
+                  exit-code: "1"
+
+            - name: Upload SARIF to GitHub Security tab
+              if: always()
+              uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
+              with:
+                  sarif_file: trivy.sarif
+                  category: trivy-${{ matrix.track }}
+
+    # ── CVE report ────────────────────────────────────────────────────────────────
+    # Runs only when one or more scan matrix jobs fail. Queries the workflow run
+    # to identify which image tracks failed, then opens or updates a GitHub issue.
+    cve-report:
+        name: Report CVE Findings
+        runs-on: ubuntu-latest
+        needs: [prepare, scan]
+        if: always() && needs.scan.result == 'failure' && github.event_name != 'pull_request'
+        permissions:
+            actions: read # gh run view — read job conclusions
+            issues: write # create / comment on CVE issue
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        steps:
+            - name: Ensure CVE issue label exists
+              run: |
+                  gh label create "cve-scan" \
+                    --color "#e11d48" \
+                    --description "Automated Trivy CVE scan failure" \
+                    --repo "${{ github.repository }}" 2>/dev/null || true
+
+            - name: Identify failed image tracks
+              id: failed
+              run: |
+                  tracks="$(gh run view "${{ github.run_id }}" \
+                    --repo "${{ github.repository }}" \
+                    --json jobs \
+                    --jq '[.jobs[]
+                          | select(.name | startswith("Scan / "))
+                          | select(.conclusion == "failure")
+                          | .name
+                          | ltrimstr("Scan / ")] | join(", ")')"
+                  echo "tracks=${tracks}" >> "$GITHUB_OUTPUT"
+
+            - name: Open or update CVE issue
+              env:
+                  VERSION: ${{ needs.prepare.outputs.version }}
+                  FAILED_TRACKS: ${{ steps.failed.outputs.tracks }}
+              run: |
+                  python3 - << 'PYEOF'
+                  import os, subprocess
+
+                  version       = os.environ['VERSION']
+                  repo          = os.environ['GITHUB_REPOSITORY']
+                  run_url       = (os.environ['GITHUB_SERVER_URL'] + '/' + repo +
+                                   '/actions/runs/' + os.environ['GITHUB_RUN_ID'])
+                  failed_tracks = os.environ.get('FAILED_TRACKS', '').strip()
+
+                  lines = [
+                      f'## CVE scan failure — `{version}`',
+                      '',
+                      'Trivy found **HIGH or CRITICAL** unfixed vulnerabilities.',
+                      f'[Workflow run]({run_url}) · [Security tab](../../security/code-scanning)',
+                      '',
+                  ]
+                  if failed_tracks:
+                      lines += ['### Failed tracks', '']
+                      for track in failed_tracks.split(', '):
+                          lines.append(f'- `{track.strip()}`')
+                  lines += [
+                      '',
+                      '### Remediation',
+                      '',
+                      '1. Wait for upstream base image patches and re-release, **or**',
+                      '2. Add the CVE ID to `.trivyignore` with an accepted-risk justification.',
+                      '',
+                      '_Opened automatically by the Deploy Container Releases workflow._',
+                  ]
+
+                  body_file = '/tmp/cve-issue-body.md'
+                  with open(body_file, 'w') as f:
+                      f.write('\n'.join(lines))
+
+                  # Comment on the existing open CVE issue, or open a new one
+                  existing = subprocess.run(
+                      ['gh', 'issue', 'list', '--repo', repo,
+                       '--label', 'cve-scan', '--state', 'open',
+                       '--json', 'number', '--jq', '.[0].number'],
+                      capture_output=True, text=True,
+                  )
+                  existing_num = existing.stdout.strip()
+
+                  if existing_num:
+                      subprocess.run(
+                          ['gh', 'issue', 'comment', existing_num,
+                           '--repo', repo, '--body-file', body_file],
+                          check=True,
+                      )
+                      print(f'Updated existing CVE issue #{existing_num}')
+                  else:
+                      subprocess.run(
+                          ['gh', 'issue', 'create',
+                           '--repo', repo,
+                           '--title', f'CVE scan failure: {version}',
+                           '--label', 'cve-scan',
+                           '--body-file', body_file],
+                          check=True,
+                      )
+                      print('Opened new CVE issue')
+                  PYEOF
+
+    # ── GitHub Release ────────────────────────────────────────────────────────────
+    # Release body is generated from versions.yml so it always reflects exactly
+    # what was built. Depends on scan — releases are blocked on CVE findings.
+    release:
+        name: Create GitHub Release
+        runs-on: ubuntu-latest
+        needs: [prepare, scan]
+        if: startsWith(needs.prepare.outputs.version, 'v') && github.event_name != 'pull_request'
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Install Python dependencies
+              run: python3 -m pip install --disable-pip-version-check pyyaml
+
+            - name: Build release body from versions.yml
+              env:
+                  OWNER: ${{ needs.prepare.outputs.owner_lower }}
+                  VERSION_NO_V: ${{ needs.prepare.outputs.version_no_v }}
+              run: |
+                  python3 - << 'PYEOF'
+                  import yaml, json, os, re
+
+                  with open('versions.yml') as f:
+                      v = yaml.safe_load(f)
+
+                  reg   = "ghcr.io"
+                  owner = os.environ['OWNER']
+                  ver   = os.environ['VERSION_NO_V']
+
+                  status_label = {
+                      'active':     '✅ active',
+                      'maintained': '🔧 maintained',
+                      'deprecated': '⚠️ deprecated',
+                  }
+
+                  def image_name_from_file(path):
+                      with open(path) as f:
+                          for line in f:
+                              m = re.match(r'^LABEL\s+org\.opencontainers\.image\.title="([^"]+)"', line)
+                              if m:
+                                  return re.sub(r'[^a-z0-9._-]', '-', m.group(1).lower())
+                      raise ValueError(f"No org.opencontainers.image.title in {path}")
+
+                  rows = ['## Published images', '',
+                          '| Track | Image | Status |',
+                          '|-------|-------|--------|']
+
+                  name_cache = {}
+                  def cached_name(dockerfile):
+                      if dockerfile not in name_cache:
+                          name_cache[dockerfile] = image_name_from_file(dockerfile)
+                      return name_cache[dockerfile]
+
+                  for t in v['base-tracks']:
+                      if t['status'] == 'eol':
+                          continue
+                      img = cached_name(t['dockerfile'])
+                      tag = f'`{reg}/{owner}/{img}:{ver}-{t["suffix"]}`'
+                      rows.append(f'| {t["suffix"]} | {tag} | {status_label[t["status"]]} |')
+
+                  for t in v['tool-tracks']:
+                      if t['status'] == 'eol':
+                          continue
+                      img    = cached_name(t['dockerfile'])
+                      suffix = t.get('tag-suffix', '')
+                      tag_v  = f'{ver}-{suffix}' if suffix else ver
+                      tag    = f'`{reg}/{owner}/{img}:{tag_v}`'
+                      rows.append(f'| {t["track"]} | {tag} | {status_label[t["status"]]} |')
+
+                  with open('/tmp/release-body.md', 'w') as f:
+                      f.write('\n'.join(rows) + '\n')
+                  PYEOF
+
+            - name: Create release entry
+              uses: softprops/action-gh-release@c062e08bd532815e2082a7e09ce9571a6d14b16b # v2.2.1
+              with:
+                  tag_name: ${{ needs.prepare.outputs.version }}
+                  generate_release_notes: true
+                  body_path: /tmp/release-body.md
