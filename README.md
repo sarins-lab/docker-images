@@ -8,7 +8,8 @@ Container releases are published to GitHub Container Registry (GHCR) by the work
 
 ## Local security checks
 
-CodeQL scans GitHub Actions workflows in CI via `.github/workflows/codeql.yml`.
+GitHub CodeQL default setup scans the repository in GitHub. Keep repository
+default setup enabled, or disable it before adding a checked-in CodeQL workflow.
 
 To run the same analysis locally, install the CodeQL CLI and run:
 

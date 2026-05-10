@@ -234,7 +234,7 @@ RUN chown root:root /usr/local/bin/bao /usr/local/bin/step
 # the apk packages (curl, jq) or the copied binaries (bao, step).
 # platform-base already stripped the base Alpine filesystem; this layer only
 # needs to catch what was added since.
-RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
+RUN find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
 # ── Runtime credentials (injected via PodSpec only) ───────────────────────────
 # CIS DI-4.8: do NOT set runtime secrets as ENV stubs. Even empty values

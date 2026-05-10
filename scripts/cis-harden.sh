@@ -124,7 +124,7 @@ create_user_linux() {
         return
     fi
     log "Creating dedicated non-root user '${CIS_USER}' uid/gid=${CIS_UID} (CIS DI-4.1)..."
-    run groupadd -g "${CIS_UID}" "${CIS_USER}" 2>/dev/null || true
+    getent group "${CIS_USER}" >/dev/null || run groupadd -g "${CIS_UID}" "${CIS_USER}"
     run useradd -u "${CIS_UID}" -g "${CIS_UID}" -M \
         -s /sbin/nologin -c "Platform service account" "${CIS_USER}"
 }
@@ -139,7 +139,7 @@ harden_alpine() {
     # -xdev: stay on the root filesystem; skip /proc, /sys, /dev.
     # Privilege-escalation bits serve no purpose in a non-root init container.
     log "Stripping SUID/SGID bits from filesystem (CIS DI-4.10)..."
-    run find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
+    run find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
     # CIS DI-4.1: Create a dedicated non-root user.
     # "nobody" (65534) is a shared system account used by NFS and daemons —
@@ -186,7 +186,7 @@ harden_container_linux() {
 
     # CIS DI-4.10: strip SUID/SGID bits from the entire container filesystem
     log "Stripping SUID/SGID bits (CIS DI-4.10)..."
-    run find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
+    run find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 
     # CIS DI-4.1: dedicated non-root user
     create_user_linux
