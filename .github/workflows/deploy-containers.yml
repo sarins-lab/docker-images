@@ -390,7 +390,7 @@ jobs:
                     echo "image=${base}:${ver}" >> "$GITHUB_OUTPUT"
                   fi
 
-            - name: Scan image with Trivy
+            - name: Generate Trivy SARIF
               uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.36.0
               with:
                   image-ref: ${{ steps.ref.outputs.image }}
@@ -399,14 +399,24 @@ jobs:
                   output: trivy.sarif
                   severity: HIGH,CRITICAL
                   ignore-unfixed: true
-                  exit-code: "1"
+                  exit-code: "0"
 
             - name: Upload SARIF to GitHub Security tab
-              if: always()
+              if: always() && hashFiles('trivy.sarif') != ''
               uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
               with:
                   sarif_file: trivy.sarif
                   category: trivy-${{ matrix.track }}
+
+            - name: Enforce Trivy CVE gate
+              uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.36.0
+              with:
+                  image-ref: ${{ steps.ref.outputs.image }}
+                  scan-type: image
+                  format: table
+                  severity: HIGH,CRITICAL
+                  ignore-unfixed: true
+                  exit-code: "1"
 
     # ── CVE report ────────────────────────────────────────────────────────────────
     # Runs only when one or more scan matrix jobs fail. Queries the workflow run
