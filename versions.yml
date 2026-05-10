@@ -1,0 +1,106 @@
+# =============================================================================
+# versions.yml — Image track lifecycle registry
+# =============================================================================
+#
+# This file is the single source of truth for what gets built and published.
+# The CI workflow reads it to generate its build matrices — do not duplicate
+# version information in the workflow file.
+#
+# Track status lifecycle:
+#   active      — newest release of this OS line; actively developed
+#   maintained  — older release still receiving security patches; still built
+#   deprecated  — EOL approaching; users should migrate; still built but
+#                 flagged in release notes
+#   eol         — past end-of-life; CI stops building; existing GHCR packages
+#                 remain available but receive no new versions
+#
+# To sunset a track:
+#   1. Change status to 'eol'.
+#   2. The next release will stop publishing to that tag automatically.
+#   3. Optionally delete the GHCR package versions via the GitHub UI.
+#
+# To add a new OS version:
+#   1. Add an entry with status 'active'.
+#   2. Bump the previous 'active' entry of the same OS to 'maintained'.
+#   3. Update any tool-track base-suffix references if the new version should
+#      become the canonical base for tool images.
+#
+# To change which base a tool image builds on:
+#   1. Update base-suffix in the tool-tracks section.
+#   2. The base-suffix must match a non-eol entry in base-tracks.
+#      The generate-matrix CI step validates this at build time.
+# =============================================================================
+
+base-tracks:
+
+  # Alpine Linux — https://alpinelinux.org/releases/
+  - suffix:     alpine321
+    dockerfile: alpine.dockerfile
+    build-arg:  ALPINE_VERSION=3.21
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
+    eol:        "2026-11-01"
+    status:     maintained
+
+  - suffix:     alpine322
+    dockerfile: alpine.dockerfile
+    build-arg:  ALPINE_VERSION=3.22.1
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
+    eol:        "2027-05-01"
+    status:     active
+
+  # Rocky Linux — https://rockylinux.org/
+  - suffix:     rocky9
+    dockerfile: rocky.dockerfile
+    build-arg:  ROCKY_VERSION=9-minimal
+    platforms:  linux/amd64,linux/arm64
+    eol:        "2032-05-31"
+    status:     maintained
+
+  - suffix:     rocky10
+    dockerfile: rocky.dockerfile
+    build-arg:  ROCKY_VERSION=10-minimal
+    platforms:  linux/amd64,linux/arm64
+    eol:        "2035-05-31"
+    status:     active
+
+  # Debian — https://www.debian.org/releases/
+  - suffix:     debian12
+    dockerfile: debian.dockerfile
+    build-arg:  DEBIAN_VERSION=12-slim
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
+    eol:        "2028-06-30"
+    status:     maintained
+
+  - suffix:     debian13
+    dockerfile: debian.dockerfile
+    build-arg:  DEBIAN_VERSION=13-slim
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
+    eol:        "2031-06-30"
+    status:     active
+
+  # Ubuntu LTS — https://ubuntu.com/about/release-cycle
+  - suffix:     ubuntu24
+    dockerfile: ubuntu.dockerfile
+    build-arg:  UBUNTU_VERSION=24.04
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7
+    eol:        "2029-05-31"
+    status:     maintained
+
+  - suffix:     ubuntu26
+    dockerfile: ubuntu.dockerfile
+    build-arg:  UBUNTU_VERSION=26.04
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7
+    eol:        "2031-05-31"
+    status:     active
+
+tool-tracks:
+
+  # platform-init-tools — extends hardened-alpine-base with bao, step, curl, jq
+  # base-suffix must match a non-eol alpine entry in base-tracks above.
+  # Update base-suffix when the canonical Alpine base advances to a new version.
+  - track:        init-tools
+    dockerfile:   init-tools.dockerfile
+    base-image:   hardened-alpine-base
+    base-suffix:  alpine322
+    platforms:    linux/amd64,linux/arm64
+    status:       active
