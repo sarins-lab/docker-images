@@ -72,7 +72,8 @@ LABEL org.opencontainers.image.title="hardened-rocky-base" \
 
 # Pull in the latest security errata from the selected Rocky stream before the
 # CIS pass strips SUID/SGID bits from the final filesystem.
-RUN microdnf distro-sync -y --refresh --best --setopt=install_weak_deps=0 \
+RUN microdnf makecache \
+    && microdnf update -y --setopt=install_weak_deps=0 \
     && microdnf clean all \
     && rm -rf /var/cache/dnf /var/cache/yum
 
