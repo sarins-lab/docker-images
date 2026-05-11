@@ -67,6 +67,17 @@ LABEL org.opencontainers.image.title="hardened-ubuntu-base" \
     org.opencontainers.image.vendor="sarins-lab" \
     org.opencontainers.image.base.name="ubuntu:${UBUNTU_VERSION}"
 
+# Pull in currently published Ubuntu security fixes before hardening.
+# Ubuntu 26.04 rootfs can include a stray pebble Go binary outside dpkg
+# ownership; remove it because this base image does not use it.
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
+    rm -f /usr/bin/pebble; \
+    rm -rf /var/lib/pebble; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
 # ── CIS hardening ─────────────────────────────────────────────────────────────
 # --container selects the Docker Benchmark subset of controls.
 # Host-only controls (sysctl, SSH daemon, auditd, UFW, services) are skipped —

@@ -64,11 +64,14 @@ base-tracks:
     status:     active
 
   # Debian — https://www.debian.org/releases/
+  # Debian 12 remains maintained while consumers validate Debian 13 migration.
+  # Current bookworm packages have unresolved Trivy findings with no fixed
+  # package versions available from Debian; reassess before the target EOL.
   - suffix:     debian12
     dockerfile: debian.dockerfile
     build-arg:  DEBIAN_VERSION=12-slim
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
-    eol:        "2028-06-30"
+    eol:        "2026-12-31"
     status:     maintained
 
   - suffix:     debian13
@@ -84,7 +87,7 @@ base-tracks:
     build-arg:  UBUNTU_VERSION=24.04
     platforms:  linux/amd64,linux/arm64,linux/arm/v7
     eol:        "2029-05-31"
-    status:     active
+    status:     maintained
 
   - suffix:     ubuntu26
     dockerfile: ubuntu.dockerfile

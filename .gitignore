@@ -14,5 +14,9 @@
 
 # Build / CI artifacts
 *.log
+__pycache__/
 .codeql/
 .trivy-cache/
+.trivy/
+**/__pycache__/
+**/dist/

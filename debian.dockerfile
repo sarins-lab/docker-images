@@ -65,6 +65,13 @@ LABEL org.opencontainers.image.title="hardened-debian-base" \
     org.opencontainers.image.vendor="sarins-lab" \
     org.opencontainers.image.base.name="debian:${DEBIAN_VERSION}"
 
+# Pull in currently published Debian security fixes before hardening.
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
 # ── CIS hardening ─────────────────────────────────────────────────────────────
 # --container selects Docker Benchmark controls only (DI-4.1 + DI-4.10).
 # Host-only controls are skipped; they cannot be applied inside a container.
