@@ -319,16 +319,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cache-dir", default=".trivy-cache")
     parser.add_argument("--results-dir", default=".trivy/results")
     parser.add_argument("--ignore-file", default=".trivyignore")
-    parser.add_argument("--severity", nargs="*", default=["UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"])
+    parser.add_argument("--severity", nargs="*", default=["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"])
     parser.add_argument("--scanners", nargs="*", default=["vuln"])
-    parser.add_argument("--ignore-unfixed", nargs="?", const="true", default="true")
+    parser.add_argument("--ignore-unfixed", dest="ignore_unfixed", action="store_true", default=True)
+    parser.add_argument("--include-unfixed", dest="ignore_unfixed", action="store_false")
     parser.add_argument("--exit-code", type=int, default=0)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    args.ignore_unfixed = parse_bool(args.ignore_unfixed)
     severity = csv(args.severity)
     scanners = csv(args.scanners)
     if not severity:
@@ -393,7 +393,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        exit_code = main()
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)
+    raise SystemExit(exit_code)
