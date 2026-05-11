@@ -282,7 +282,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ignore-file", default=".trivyignore")
     parser.add_argument("--severity", nargs="*", default=["UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"])
     parser.add_argument("--scanners", nargs="*", default=["vuln"])
-    parser.add_argument("--ignore-unfixed", default="false")
+    parser.add_argument("--ignore-unfixed", default="true")
     parser.add_argument("--exit-code", type=int, default=0)
     return parser.parse_args()
 

@@ -461,8 +461,10 @@ jobs:
 
     # ── CVE scanning ─────────────────────────────────────────────────────────────
     # One matrix job per published image — each uses aquasecurity/trivy-action to
-    # scan for HIGH/CRITICAL unfixed CVEs and upload a SARIF file to the Security
-    # tab. fail-fast:false ensures all images are scanned even if one fails.
+    # scan for fixed HIGH/CRITICAL CVEs and upload a SARIF file to the Security
+    # tab. limit-severities-for-sarif keeps GitHub Code Scanning aligned with
+    # the severity gate instead of uploading all lower-severity SARIF findings.
+    # fail-fast:false ensures all images are scanned even if one fails.
     # The overall matrix result is 'failure' if any single image scan fails.
     #
     # To accept a known risk add the CVE ID to .trivyignore at the repo root with
@@ -514,6 +516,7 @@ jobs:
                   output: trivy.sarif
                   trivyignores: .trivyignore
                   severity: HIGH,CRITICAL
+                  limit-severities-for-sarif: true
                   ignore-unfixed: true
                   exit-code: "0"
               env:
