@@ -29,6 +29,8 @@
 #                specific controls (sysctl, SSH, auditd, firewall, services).
 #                Required when running inside a Dockerfile on Ubuntu, Debian,
 #                or Rocky Linux — those OSes default to full host hardening.
+#                On Alpine, container controls are already the default; this
+#                flag is optional and effectively a no-op.
 #
 # ENVIRONMENT VARIABLES (override defaults)
 #   CIS_USER   Name of the dedicated non-root user to create (default: hermes)
@@ -38,6 +40,8 @@
 #   • On Alpine: run as root (Docker build layers run as root by default).
 #   • On Ubuntu/Rocky: run as root (sudo ./cis-harden.sh).
 #   • Safe to run multiple times — each step is idempotent.
+#   • --container applies container-only controls and skips all host controls
+#     (sysctl, SSH, auditd, firewall, and service hardening) on Ubuntu/Rocky.
 #   • sysctl parameters are written to /etc/sysctl.d/60-cis.conf (number 60).
 #     This deliberately leaves room for Kubernetes tooling to override at 99-*:
 #       99-cilium.conf sets kernel.unprivileged_bpf_disabled=0 and ip_forward=1
@@ -119,7 +123,7 @@ create_user_linux() {
         log "Skipping user creation (--skip-user)"
         return
     fi
-    if id "${CIS_USER}" >/dev/null 2>&1; then
+    if getent passwd "${CIS_USER}" >/dev/null 2>&1; then
         log "User '${CIS_USER}' already exists — skipping"
         return
     fi
@@ -355,7 +359,7 @@ harden_password_policy() {
     set_logindefs PASS_MIN_DAYS          1        # CIS 5.4.1.2
     set_logindefs PASS_WARN_AGE          7        # CIS 5.4.1.3
     set_logindefs UMASK                  "027"    # CIS 5.4.4
-    set_logindefs SHA_CRYPT_MIN_ROUNDS   640000   # strengthen bcrypt/sha rounds
+    set_logindefs SHA_CRYPT_MIN_ROUNDS   640000   # strengthen SHA-256/SHA-512 crypt rounds
     set_logindefs LOGIN_RETRIES          5        # CIS 5.4.1
     set_logindefs LOGIN_TIMEOUT          60
     log "  Password policy updated."
@@ -536,8 +540,11 @@ harden_audit() {
 # CIS 4.1.17: make rules immutable until next reboot (MUST remain last)
 -e 2
 AUDITEOF
-    augenrules --load 2>/dev/null || auditctl -R "${rules}" 2>/dev/null || true
-    log "  Written and loaded: ${rules}"
+    if augenrules --load 2>/dev/null || auditctl -R "${rules}" 2>/dev/null; then
+        log "  Written and loaded: ${rules}"
+    else
+        warn "audit rules written to ${rules}, but failed to load them now (augenrules/auditctl unavailable or failed)"
+    fi
 }
 
 # ── Unnecessary services ──────────────────────────────────────────────────────
