@@ -12,7 +12,7 @@ TRIVY_RESULTS_DIR ?= .trivy/results
 TRIVY_IGNOREFILE ?= .trivyignore
 TRIVY_SEVERITY ?= UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 TRIVY_SCANNERS ?= vuln
-TRIVY_IGNORE_UNFIXED ?= false
+TRIVY_IGNORE_UNFIXED ?= true
 TRIVY_EXIT_CODE ?= 0
 TRIVY_IMAGES ?=
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
@@ -46,6 +46,7 @@ help:
 	@echo "  VERSION=<tag>       Default: $(VERSION)"
 	@echo "  DOCKER=<binary>     Default: $(DOCKER)"
 	@echo "  PYTHON=<binary>     Default: $(PYTHON)"
+	@echo "  TRIVY_IGNORE_UNFIXED=<bool> Default: $(TRIVY_IGNORE_UNFIXED)"
 	@echo "  TRIVY_EXIT_CODE=<n> Default: $(TRIVY_EXIT_CODE)"
 
 build-all:

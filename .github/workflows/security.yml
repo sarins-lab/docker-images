@@ -74,6 +74,7 @@ jobs:
           output: trivy-fs.sarif
           trivyignores: .trivyignore
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: true
 
       - name: Upload Trivy filesystem SARIF
@@ -186,6 +187,7 @@ jobs:
           output: trivy-image.sarif
           trivyignores: .trivyignore
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: true
 
       - name: Upload Trivy image SARIF

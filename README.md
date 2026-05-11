@@ -34,10 +34,19 @@ make trivy-images
 The report is written to `.trivy/results/all-cves.md`, with one Markdown and
 raw JSON report per scanned image in the same directory. The local image list is
 resolved from `versions.yml` with Python and PyYAML, matching the parser used by
-the GitHub workflows. If PyYAML is missing locally, install it with:
+the GitHub workflows. By default, the report includes all severities, excludes
+unfixed/vendor-deferred findings, and applies `.trivyignore` accepted-risk
+entries so it reflects actionable remediation work. If PyYAML is missing
+locally, install it with:
 
 ```bash
 python -m pip install pyyaml
+```
+
+To generate a full inventory that also includes unfixed/vendor-deferred CVEs:
+
+```bash
+make trivy-images TRIVY_IGNORE_UNFIXED=false
 ```
 
 For a CI-style local gate that fails only on fixed HIGH/CRITICAL findings:
