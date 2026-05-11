@@ -17,3 +17,5 @@
 .codeql/
 .trivy-cache/
 .trivy/
+**/__pycache__/
+**/dist/
