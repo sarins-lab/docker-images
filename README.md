@@ -24,29 +24,26 @@ make codeql-actions
 
 The local run writes SARIF output to `.codeql/results/actions.sarif`.
 
-To build all local Docker images and scan them with Trivy, run:
+To build every live image from `versions.yml` and generate a human-readable
+local Trivy report, run:
 
 ```bash
 make trivy-images
 ```
 
-The local Trivy run reads the image tracks from `versions.yml`, reports all
-Trivy CVEs by default, honors `.trivyignore`, and includes LOW/MEDIUM and
-unfixed findings. It writes raw JSON plus one Markdown report per image under
-`.trivy/results/`, and a consolidated human-readable report at
-`.trivy/results/all-cves.md`.
-
-To mirror the CI gate locally, restrict the report to unfixed HIGH/CRITICAL
-findings:
+The report is written to `.trivy/results/all-cves.md`, with one Markdown and
+raw JSON report per scanned image in the same directory. The local image list is
+resolved from `versions.yml` with Python and PyYAML, matching the parser used by
+the GitHub workflows. If PyYAML is missing locally, install it with:
 
 ```bash
-make trivy-images TRIVY_SEVERITY=HIGH,CRITICAL TRIVY_IGNORE_UNFIXED=true
+python -m pip install pyyaml
 ```
 
-To generate reports without failing the make target when CVEs are found:
+For a CI-style local gate that fails only on fixed HIGH/CRITICAL findings:
 
 ```bash
-make trivy-images TRIVY_EXIT_CODE=0
+make trivy-images TRIVY_SEVERITY=HIGH,CRITICAL TRIVY_IGNORE_UNFIXED=true TRIVY_EXIT_CODE=1
 ```
 
 ### Automatic release

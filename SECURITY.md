@@ -9,7 +9,7 @@ All released images are scanned for CVE vulnerabilities using Trivy at build tim
 | `alpine322`       | Alpine 3.22  | active     | :white_check_mark: Security patches published     |
 | `alpine321`       | Alpine 3.21  | maintained | :white_check_mark: Security patches published     |
 | `ubuntu26`        | Ubuntu 26.04 | active     | :white_check_mark: Security patches published     |
-| `ubuntu24`        | Ubuntu 24.04 | active     | :white_check_mark: Security patches published     |
+| `ubuntu24`        | Ubuntu 24.04 | maintained | :white_check_mark: Security patches published     |
 | `debian13`        | Debian 13    | active     | :white_check_mark: Security patches published     |
 | `debian12`        | Debian 12    | maintained | :white_check_mark: Security patches published     |
 | `rocky10`         | Rocky 10     | active     | :white_check_mark: Security patches published     |

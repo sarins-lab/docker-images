@@ -65,10 +65,7 @@ LABEL org.opencontainers.image.title="hardened-debian-base" \
     org.opencontainers.image.vendor="sarins-lab" \
     org.opencontainers.image.base.name="debian:${DEBIAN_VERSION}"
 
-# ── Base package updates ─────────────────────────────────────────────────────
-# Pull in the latest security fixes from the selected Debian stream before
-# hardening. apt remains available for derived images, but package indexes are
-# removed from this layer so they do not become stale image contents.
+# Pull in currently published Debian security fixes before hardening.
 RUN set -eux; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
