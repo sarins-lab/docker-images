@@ -1,3 +1,4 @@
 *
 !*.dockerfile
+!scripts/
 !scripts/cis-harden.sh
