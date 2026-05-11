@@ -36,14 +36,14 @@ base-tracks:
   # Alpine Linux — https://alpinelinux.org/releases/
   - suffix:     alpine321
     dockerfile: alpine.dockerfile
-    build-arg:  ALPINE_VERSION=3.21
+    build-arg:  ALPINE_VERSION=3.21.7
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2026-11-01"
     status:     maintained
 
   - suffix:     alpine322
     dockerfile: alpine.dockerfile
-    build-arg:  ALPINE_VERSION=3.22.1
+    build-arg:  ALPINE_VERSION=3.22.4
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2027-05-01"
     status:     active
@@ -84,7 +84,7 @@ base-tracks:
     build-arg:  UBUNTU_VERSION=24.04
     platforms:  linux/amd64,linux/arm64,linux/arm/v7
     eol:        "2029-05-31"
-    status:     maintained
+    status:     active
 
   - suffix:     ubuntu26
     dockerfile: ubuntu.dockerfile
