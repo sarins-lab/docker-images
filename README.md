@@ -1,15 +1,20 @@
 # docker-images
 
+[![Release](https://github.com/sarins-lab/docker-images/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/sarins-lab/docker-images/actions/workflows/release.yml)
+[![Security](https://github.com/sarins-lab/docker-images/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/sarins-lab/docker-images/actions/workflows/security.yml)
+[![CodeQL](https://github.com/sarins-lab/docker-images/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/sarins-lab/docker-images/actions/workflows/codeql.yml)
+
 Hardened Docker Images
 
 ## Deployment
 
-Container releases are published to GitHub Container Registry (GHCR) by the workflow at `.github/workflows/deploy-containers.yml`.
+Container releases are published to GitHub Container Registry (GHCR) by the workflow at `.github/workflows/release.yml`.
 
 ## Local security checks
 
-GitHub CodeQL default setup scans the repository in GitHub. Keep repository
-default setup enabled, or disable it before adding a checked-in CodeQL workflow.
+GitHub CodeQL advanced setup scans the repository in GitHub via
+`.github/workflows/codeql.yml`. Keep that workflow enabled, or disable it before
+replacing it with a different CodeQL setup.
 
 To run the same analysis locally, install the CodeQL CLI and run:
 
