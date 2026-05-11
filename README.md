@@ -24,6 +24,28 @@ make codeql-actions
 
 The local run writes SARIF output to `.codeql/results/actions.sarif`.
 
+To build every live image from `versions.yml` and generate a human-readable
+local Trivy report, run:
+
+```bash
+make trivy-images
+```
+
+The report is written to `.trivy/results/all-cves.md`, with one Markdown and
+raw JSON report per scanned image in the same directory. The local image list is
+resolved from `versions.yml` with Python and PyYAML, matching the parser used by
+the GitHub workflows. If PyYAML is missing locally, install it with:
+
+```bash
+python -m pip install pyyaml
+```
+
+For a CI-style local gate that fails only on fixed HIGH/CRITICAL findings:
+
+```bash
+make trivy-images TRIVY_SEVERITY=HIGH,CRITICAL TRIVY_IGNORE_UNFIXED=true TRIVY_EXIT_CODE=1
+```
+
 ### Automatic release
 
 Push a version tag to trigger a full multi-arch publish and GitHub Release creation:
