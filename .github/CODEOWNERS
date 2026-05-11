@@ -1,0 +1,26 @@
+# CODEOWNERS — required review for security-sensitive paths.
+# GitHub enforces these as required reviewers on pull requests
+# when the matching files are changed.
+#
+# Format: <pattern>  <@owner-or-team>
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Catch-all: any change requires review
+*                                   @sarins-lab/maintainers
+
+# Dockerfiles — CIS hardening and base image changes
+*.dockerfile                        @sarins-lab/maintainers
+
+# CIS hardening script
+scripts/cis-harden.sh               @sarins-lab/maintainers
+
+# CI/CD pipelines — supply chain and release logic
+.github/workflows/                  @sarins-lab/maintainers
+.github/codeql/                     @sarins-lab/maintainers
+.github/dependabot.yml              @sarins-lab/maintainers
+
+# Track lifecycle — controls what gets built and published
+versions.yml                        @sarins-lab/maintainers
+
+# Security policy
+SECURITY.md                         @sarins-lab/maintainers

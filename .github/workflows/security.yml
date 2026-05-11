@@ -57,8 +57,8 @@ jobs:
         with:
           fail-on-severity: moderate
 
-  trivy:
-    name: Trivy Scan
+  trivy-fs:
+    name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,6 +72,7 @@ jobs:
           scan-type: fs
           format: sarif
           output: trivy-fs.sarif
+          trivyignores: .trivyignore
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
@@ -82,15 +83,108 @@ jobs:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
-      - name: Build local image for vulnerability scan
-        run: docker build --build-arg ALPINE_VERSION=3.22.1 -f alpine.dockerfile -t hardened-alpine-base:ci .
+  generate-docker-matrix:
+    name: Generate Docker Scan Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      docker-matrix: ${{ steps.gen.outputs.docker-matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: python3 -m pip install --disable-pip-version-check pyyaml
+
+      - name: Read versions.yml and emit Docker matrix
+        id: gen
+        run: |
+          python3 - << 'PYEOF'
+          import json
+          import os
+          import sys
+
+          import yaml
+
+          with open('versions.yml') as f:
+              versions = yaml.safe_load(f)
+
+          live_bases = {track['suffix']: track for track in versions['base-tracks'] if track['status'] != 'eol'}
+          live_suffixes = set(live_bases)
+          matrix = []
+
+          for track in versions['base-tracks']:
+              if track['status'] == 'eol':
+                  continue
+
+              matrix.append({
+                  'kind': 'base',
+                  'track': track['suffix'],
+                  'dockerfile': track['dockerfile'],
+                  'build_args': track['build-arg'],
+                  'tag': f"scan/base/{track['suffix']}:scan",
+                  'status': track['status'],
+              })
+
+          for track in versions['tool-tracks']:
+              if track['status'] == 'eol':
+                  continue
+
+              if track['base-suffix'] not in live_suffixes:
+                  print(
+                      f"ERROR: tool track '{track['track']}' references base-suffix "
+                      f"'{track['base-suffix']}' which is not a live base track.",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+
+              base = live_bases[track['base-suffix']]
+              matrix.append({
+                  'kind': 'tool',
+                  'track': track['track'],
+                  'dockerfile': track['dockerfile'],
+                  'base_dockerfile': base['dockerfile'],
+                  'base_build_args': base['build-arg'],
+                  'base_suffix': track['base-suffix'],
+                  'base_image': track['base-image'],
+                  'tag': f"scan/tool/{track['track']}:scan",
+                  'status': track['status'],
+              })
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f"docker-matrix={json.dumps({'include': matrix})}\n")
+          PYEOF
+
+  trivy-docker:
+    name: Trivy Docker Scan / ${{ matrix.track }}
+    runs-on: ubuntu-latest
+    needs: generate-docker-matrix
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.generate-docker-matrix.outputs.docker-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image(s)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ matrix.kind }}" = "base" ]; then
+            docker build --build-arg "${{ matrix.build_args }}" -f "${{ matrix.dockerfile }}" -t "${{ matrix.tag }}" .
+          else
+            docker build --build-arg "${{ matrix.base_build_args }}" -f "${{ matrix.base_dockerfile }}" -t "scan/base/${{ matrix.base_suffix }}:scan" .
+            docker build --build-arg BASE_IMAGE=scan/base/${{ matrix.base_suffix }}:scan -f "${{ matrix.dockerfile }}" -t "${{ matrix.tag }}" .
+          fi
 
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: hardened-alpine-base:ci
+          image-ref: ${{ matrix.tag }}
           format: sarif
           output: trivy-image.sarif
+          trivyignores: .trivyignore
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
@@ -99,4 +193,4 @@ jobs:
         if: always() && hashFiles('trivy-image.sarif') != ''
         with:
           sarif_file: trivy-image.sarif
-          category: trivy-image
+          category: trivy-${{ matrix.track }}

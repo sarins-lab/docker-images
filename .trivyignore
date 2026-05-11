@@ -1,0 +1,11 @@
+# .trivyignore — acknowledged CVE exceptions for Trivy scans.
+#
+# Add entries here only after manual triage confirms a finding is either:
+#   - a false positive
+#   - has no fix available and risk is accepted with a linked issue
+#
+# Format:
+#   CVE-YYYY-NNNNN  # reason — expires: YYYY-MM-DD  issue: #NNN
+#
+# Example (commented out):
+#   CVE-2023-12345  # false positive in apk metadata — expires: 2025-12-31  issue: #42
