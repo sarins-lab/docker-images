@@ -16,3 +16,4 @@
 *.log
 .codeql/
 .trivy-cache/
+.trivy/

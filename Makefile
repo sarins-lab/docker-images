@@ -1,4 +1,4 @@
-SHELL := /usr/bin/env bash
+SHELL := bash
 
 DOCKER ?= docker
 VERSION ?= 1.0.0
@@ -9,11 +9,23 @@ DEBIAN_IMAGE := hardened-debian-base
 UBUNTU_IMAGE := hardened-ubuntu-base
 TOOLS_IMAGE := platform-init-tools
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
+VERSIONS_FILE ?= versions.yml
+IMAGE_SCRIPT ?= scripts/images-from-versions.ps1
+TRIVY ?= trivy
+TRIVY_CACHE_DIR ?= .trivy-cache
+TRIVY_RESULTS_DIR ?= .trivy/results
+TRIVY_IGNOREFILE ?= .trivyignore
+TRIVY_SEVERITY ?= UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+TRIVY_SCANNERS ?= vuln
+TRIVY_IGNORE_UNFIXED ?= false
+TRIVY_EXIT_CODE ?= 1
+TRIVY_SCRIPT ?= scripts/trivy-images.ps1
+TRIVY_IMAGES ?=
 
 .PHONY: help build-all build-base build-tools \
 	build-alpine321 build-alpine322 build-rocky9 build-rocky10 \
 	build-debian12 build-debian13 build-ubuntu24 build-ubuntu26 build-init-tools \
-	list-images \
+	list-images trivy-images \
 	act-install act-secrets ci-list ci-dry-run ci-matrix ci-prepare \
 	codeql-actions
 
@@ -32,25 +44,22 @@ help:
 	@echo "  make ci-matrix      Run generate-matrix job (validates versions.yml)"
 	@echo "  make ci-prepare     Run prepare job (validates semver logic)"
 	@echo "                        VERSION=v1.2.3 overrides the default test version"
+	@echo "  make trivy-images   Build and scan all local Docker images with Trivy"
+	@echo "                        Markdown and JSON reports are written under .trivy/results/"
 	@echo "  make codeql-actions Run CodeQL locally for GitHub Actions workflows"
 	@echo ""
 	@echo "Variables"
 	@echo "  VERSION=<tag>       Default: $(VERSION)"
 	@echo "  DOCKER=<binary>     Default: $(DOCKER)"
 
-build-all: build-base build-tools
+build-all:
+	pwsh -NoProfile -File "$(IMAGE_SCRIPT)" -Command BuildAll -VersionsFile "$(VERSIONS_FILE)" -Version "$(VERSION)" -Docker "$(DOCKER)" -GitSha "$(GIT_SHA)"
 
-build-base: \
-	build-alpine321 \
-	build-alpine322 \
-	build-rocky9 \
-	build-rocky10 \
-	build-debian12 \
-	build-debian13 \
-	build-ubuntu24 \
-	build-ubuntu26
+build-base:
+	pwsh -NoProfile -File "$(IMAGE_SCRIPT)" -Command BuildBase -VersionsFile "$(VERSIONS_FILE)" -Version "$(VERSION)" -Docker "$(DOCKER)"
 
-build-tools: build-init-tools
+build-tools:
+	pwsh -NoProfile -File "$(IMAGE_SCRIPT)" -Command BuildTools -VersionsFile "$(VERSIONS_FILE)" -Version "$(VERSION)" -Docker "$(DOCKER)" -GitSha "$(GIT_SHA)" -BuildDependencies
 
 build-alpine321:
 	$(DOCKER) build --build-arg ALPINE_VERSION=3.21.7 -f alpine.dockerfile -t $(ALPINE_IMAGE):$(VERSION)-alpine321 .
@@ -81,16 +90,10 @@ build-init-tools: build-alpine322
 	$(DOCKER) build --build-arg BASE_IMAGE=$(ALPINE_IMAGE):$(VERSION)-alpine322 -f init-tools.dockerfile -t $(TOOLS_IMAGE):$(VERSION) -t $(TOOLS_IMAGE):sha-$(GIT_SHA) .
 
 list-images:
-	@echo "$(ALPINE_IMAGE):$(VERSION)-alpine321"
-	@echo "$(ALPINE_IMAGE):$(VERSION)-alpine322"
-	@echo "$(ROCKY_IMAGE):$(VERSION)-rocky9"
-	@echo "$(ROCKY_IMAGE):$(VERSION)-rocky10"
-	@echo "$(DEBIAN_IMAGE):$(VERSION)-debian12"
-	@echo "$(DEBIAN_IMAGE):$(VERSION)-debian13"
-	@echo "$(UBUNTU_IMAGE):$(VERSION)-ubuntu24"
-	@echo "$(UBUNTU_IMAGE):$(VERSION)-ubuntu26"
-	@echo "$(TOOLS_IMAGE):$(VERSION)"
-	@echo "$(TOOLS_IMAGE):sha-$(GIT_SHA)"
+	@pwsh -NoProfile -File "$(IMAGE_SCRIPT)" -Command Images -VersionsFile "$(VERSIONS_FILE)" -Version "$(VERSION)" -GitSha "$(GIT_SHA)" -IncludeGitShaTag
+
+trivy-images: build-all
+	pwsh -NoProfile -Command '$$images = "$(TRIVY_IMAGES)"; if ([string]::IsNullOrWhiteSpace($$images)) { $$images = & "$(IMAGE_SCRIPT)" -Command Images -VersionsFile "$(VERSIONS_FILE)" -Version "$(VERSION)" -AsArgumentString }; & "$(TRIVY_SCRIPT)" -Images $$images -Trivy "$(TRIVY)" -CacheDir "$(TRIVY_CACHE_DIR)" -ResultsDir "$(TRIVY_RESULTS_DIR)" -IgnoreFile "$(TRIVY_IGNOREFILE)" -Severity "$(TRIVY_SEVERITY)" -Scanners "$(TRIVY_SCANNERS)" -IgnoreUnfixed "$(TRIVY_IGNORE_UNFIXED)" -ExitCode "$(TRIVY_EXIT_CODE)"; exit $$LASTEXITCODE'
 
 # ── Local CI via gh act ───────────────────────────────────────────────────────
 # Runs GitHub Actions workflow jobs locally inside Docker containers.
