@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,8 @@ from images_from_versions import ImageResolver, load_versions
 
 
 SEVERITY_ORDER = {"UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+TRIVYIGNORE_ENTRY_PATTERN = re.compile(r"^\s*(CVE-\d{4}-\d+)\b")
+TRIVYIGNORE_EXPIRES_PATTERN = re.compile(r"\bexpires:\s*(\d{4}-\d{2}-\d{2})\b")
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -53,6 +56,42 @@ def markdown_link(text: Any, url: Any) -> str:
     if not url:
         return label
     return f"[{label}]({str(url).strip().replace(')', '%29')})"
+
+
+def validate_trivyignore(ignore_file: str, today: date) -> None:
+    path = Path(ignore_file)
+    if not ignore_file or not path.exists():
+        return
+
+    errors: list[str] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        entry = TRIVYIGNORE_ENTRY_PATTERN.match(stripped)
+        if not entry:
+            continue
+
+        cve = entry.group(1)
+        expires = TRIVYIGNORE_EXPIRES_PATTERN.search(line)
+        if not expires:
+            errors.append(f"{path}:{line_number}: {cve} is missing expires: YYYY-MM-DD")
+            continue
+
+        expires_text = expires.group(1)
+        try:
+            expires_on = date.fromisoformat(expires_text)
+        except ValueError:
+            errors.append(f"{path}:{line_number}: {cve} has invalid expiration date {expires_text!r}")
+            continue
+
+        if expires_on < today:
+            errors.append(f"{path}:{line_number}: {cve} expired on {expires_on.isoformat()}")
+
+    if errors:
+        details = "\n".join(f"  - {error}" for error in errors)
+        raise ValueError(f"Trivy ignore file has expired or invalid entries:\n{details}")
 
 
 def finding_rows(scan: dict[str, Any], image: str) -> list[dict[str, Any]]:
@@ -282,7 +321,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ignore-file", default=".trivyignore")
     parser.add_argument("--severity", nargs="*", default=["UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"])
     parser.add_argument("--scanners", nargs="*", default=["vuln"])
-    parser.add_argument("--ignore-unfixed", default="true")
+    parser.add_argument("--ignore-unfixed", nargs="?", const="true", default="true")
     parser.add_argument("--exit-code", type=int, default=0)
     return parser.parse_args()
 
@@ -297,6 +336,9 @@ def main() -> int:
     if not scanners:
         raise ValueError("No Trivy scanners were provided")
 
+    now = datetime.now().astimezone()
+    validate_trivyignore(args.ignore_file, now.date())
+
     if args.images:
         images = args.images
     else:
@@ -308,7 +350,7 @@ def main() -> int:
 
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
-    generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+    generated_at = now.strftime("%Y-%m-%d %H:%M:%S %z")
 
     all_findings: list[dict[str, Any]] = []
     for image in images:

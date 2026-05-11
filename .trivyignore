@@ -12,33 +12,33 @@
 
 # OpenBao v2.5.3 is the latest release as of 2026-05-11 and is newer than these fixed versions;
 # Trivy sees the bao binary's embedded OpenBao module as a pseudo-version.
-CVE-2024-8185   # false positive: bao v2.5.3 >= fixed 2.0.3 — expires: 2026-08-11
-CVE-2024-9180   # false positive: bao v2.5.3 >= fixed 2.0.3 — expires: 2026-08-11
-CVE-2025-59043  # false positive: bao v2.5.3 >= fixed 2.4.1 — expires: 2026-08-11
-CVE-2025-64761  # false positive: bao v2.5.3 >= fixed 2.4.4 — expires: 2026-08-11
+CVE-2024-8185   # false positive: bao v2.5.3 >= fixed 2.0.3 — expires: 2026-08-11  issue: #10
+CVE-2024-9180   # false positive: bao v2.5.3 >= fixed 2.0.3 — expires: 2026-08-11  issue: #10
+CVE-2025-59043  # false positive: bao v2.5.3 >= fixed 2.4.1 — expires: 2026-08-11  issue: #10
+CVE-2025-64761  # false positive: bao v2.5.3 >= fixed 2.4.4 — expires: 2026-08-11  issue: #10
 
 # smallstep/cli v0.30.2 is the latest release as of 2026-05-11 and still embeds these
 # vulnerable Go modules/stdlib versions. Recheck when the next step release lands.
-CVE-2026-34986  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-33816  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-29181  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-32280  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-32281  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-32283  # accepted risk: no newer official step release — expires: 2026-06-30
-CVE-2026-33810  # accepted risk: no newer official step release — expires: 2026-06-30
+CVE-2026-34986  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-33816  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-29181  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-32280  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-32281  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-32283  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
+CVE-2026-33810  # accepted risk: no newer official step release — expires: 2026-06-30  issue: #10
 
 # Latest official OpenBao/step releases still embed these fixed-but-not-yet
 # released upstream dependency versions. Recheck when either upstream ships.
-CVE-2026-32282  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30
-CVE-2026-32288  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30
-CVE-2026-32289  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30
-CVE-2026-32952  # accepted risk: latest official OpenBao release embeds go-ntlmssp below 0.1.1 — expires: 2026-06-30
-CVE-2026-33811  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-33814  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-39820  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-39823  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-39825  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-39826  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-39836  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
-CVE-2026-41889  # accepted risk: latest official OpenBao/step releases embed pgx below 5.9.2 — expires: 2026-06-30
-CVE-2026-42499  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30
+CVE-2026-32282  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30  issue: #10
+CVE-2026-32288  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30  issue: #10
+CVE-2026-32289  # accepted risk: latest official step release embeds Go stdlib v1.26.1 — expires: 2026-06-30  issue: #10
+CVE-2026-32952  # accepted risk: latest official OpenBao release embeds go-ntlmssp below 0.1.1 — expires: 2026-06-30  issue: #10
+CVE-2026-33811  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-33814  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-39820  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-39823  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-39825  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-39826  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-39836  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
+CVE-2026-41889  # accepted risk: latest official OpenBao/step releases embed pgx below 5.9.2 — expires: 2026-06-30  issue: #10
+CVE-2026-42499  # accepted risk: latest official OpenBao/step releases embed affected Go stdlib — expires: 2026-06-30  issue: #10
