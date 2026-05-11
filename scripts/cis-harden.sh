@@ -195,11 +195,11 @@ harden_container_linux() {
     # Not done here — derived images need to install packages first.
     # Each derived Dockerfile must clean up in its final privileged layer:
     #   Ubuntu/Debian: apt-get clean && rm -rf /var/lib/apt/lists/*
-    #   Rocky/RHEL:    dnf clean all && rm -rf /var/cache/dnf
+    #   Rocky/RHEL:    microdnf clean all && rm -rf /var/cache/dnf /var/cache/yum
     log "Container hardening complete."
     log "REMINDER (CIS DI-4.3): derived Dockerfiles must clean package manager state"
     log "  after all installs: apt-get clean && rm -rf /var/lib/apt/lists/*"
-    log "                   OR dnf clean all && rm -rf /var/cache/dnf"
+    log "                   OR microdnf clean all && rm -rf /var/cache/dnf /var/cache/yum"
 }
 
 # =============================================================================

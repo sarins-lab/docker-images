@@ -463,6 +463,7 @@ jobs:
                   scan-type: image
                   format: sarif
                   output: trivy.sarif
+                  trivyignores: .trivyignore
                   severity: HIGH,CRITICAL
                   ignore-unfixed: true
                   exit-code: "0"
@@ -483,6 +484,7 @@ jobs:
                   image-ref: ${{ steps.ref.outputs.image }}
                   scan-type: image
                   format: table
+                  trivyignores: .trivyignore
                   severity: HIGH,CRITICAL
                   ignore-unfixed: true
                   exit-code: "1"

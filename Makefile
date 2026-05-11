@@ -53,10 +53,10 @@ build-base: \
 build-tools: build-init-tools
 
 build-alpine321:
-	$(DOCKER) build --build-arg ALPINE_VERSION=3.21 -f alpine.dockerfile -t $(ALPINE_IMAGE):$(VERSION)-alpine321 .
+	$(DOCKER) build --build-arg ALPINE_VERSION=3.21.7 -f alpine.dockerfile -t $(ALPINE_IMAGE):$(VERSION)-alpine321 .
 
 build-alpine322:
-	$(DOCKER) build --build-arg ALPINE_VERSION=3.22.1 -f alpine.dockerfile -t $(ALPINE_IMAGE):$(VERSION)-alpine322 .
+	$(DOCKER) build --build-arg ALPINE_VERSION=3.22.4 -f alpine.dockerfile -t $(ALPINE_IMAGE):$(VERSION)-alpine322 .
 	$(DOCKER) tag $(ALPINE_IMAGE):$(VERSION)-alpine322 $(ALPINE_IMAGE):$(VERSION)
 
 build-rocky9:

@@ -13,12 +13,12 @@
 #   • USER 10001:10001 as the final instruction
 #
 # Derived image responsibilities (CIS DI-4.3):
-#   dnf is intentionally left in place so derived images can install packages.
-#   They MUST clean up in the same RUN layer as their final dnf install:
-#     RUN dnf install -y --setopt=install_weak_deps=False <pkgs> \
-#         && dnf clean all && rm -rf /var/cache/dnf
-#   Removing /var/cache/dnf and not providing yum.repos.d overrides effectively
-#   prevents further dnf installs without a deliberate `dnf makecache` call.
+#   microdnf is intentionally left in place so derived images can install packages.
+#   They MUST clean up in the same RUN layer as their final microdnf install:
+#     RUN microdnf install -y --setopt=install_weak_deps=0 <pkgs> \
+#         && microdnf clean all && rm -rf /var/cache/dnf /var/cache/yum
+#   Removing package-manager caches effectively prevents further installs without
+#   a deliberate `microdnf makecache` call.
 #
 # Hardening applied by scripts/cis-harden.sh --container:
 #   DI-4.1  Dedicated non-root user: hermes (uid/gid 10001)
@@ -70,6 +70,12 @@ LABEL org.opencontainers.image.title="hardened-rocky-base" \
     org.opencontainers.image.vendor="sarins-lab" \
     org.opencontainers.image.base.name="rockylinux:${ROCKY_VERSION}"
 
+# Pull in the latest security errata from the selected Rocky stream before the
+# CIS pass strips SUID/SGID bits from the final filesystem.
+RUN microdnf distro-sync -y --refresh --best --setopt=install_weak_deps=0 \
+    && microdnf clean all \
+    && rm -rf /var/cache/dnf /var/cache/yum
+
 # ── CIS hardening ─────────────────────────────────────────────────────────────
 # --container selects Docker Benchmark controls only (DI-4.1 + DI-4.10).
 # Host-only controls (SELinux, sysctl, SSH, firewalld, auditd) are skipped;
@@ -92,9 +98,9 @@ ENV HOME=/dev/null
 HEALTHCHECK NONE
 
 # ── Non-root enforcement ──────────────────────────────────────────────────────
-# CIS DI-4.1: hermes (10001:10001). Derived images needing dnf must:
+# CIS DI-4.1: hermes (10001:10001). Derived images needing microdnf must:
 #   USER root
-#   RUN dnf install -y --setopt=install_weak_deps=False <pkgs> \
-#       && dnf clean all && rm -rf /var/cache/dnf
+#   RUN microdnf install -y --setopt=install_weak_deps=0 <pkgs> \
+#       && microdnf clean all && rm -rf /var/cache/dnf /var/cache/yum
 #   USER 10001:10001
 USER 10001:10001

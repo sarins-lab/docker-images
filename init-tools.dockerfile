@@ -28,7 +28,7 @@
 #
 # ── Build order ───────────────────────────────────────────────────────────────
 # 1. Build hardened-alpine-base locally first (see alpine.dockerfile):
-#      docker build --build-arg ALPINE_VERSION=3.21 \
+#      docker build --build-arg ALPINE_VERSION=3.22.4 \
 #        -f alpine.dockerfile -t hardened-alpine-base:dev .
 #
 # 2. Build platform-init-tools:
@@ -79,7 +79,7 @@ ARG STEP_ARM64_SHA256=7d66fa62949d64142b053db1c86ee29037088919cd329ac7966b15b09e
 # Downloads and verifies third-party CLI binaries.
 # This stage is NOT present in the final image.
 # =============================================================================
-FROM alpine:3.21 AS fetcher
+FROM alpine:3.22.4 AS fetcher
 
 # Re-declare version and checksum ARGs so they are visible in this stage.
 ARG OPENBAO_VERSION
