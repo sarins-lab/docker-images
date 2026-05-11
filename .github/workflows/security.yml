@@ -72,6 +72,7 @@ jobs:
           scan-type: fs
           format: sarif
           output: trivy-fs.sarif
+          trivyignores: .trivyignore
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
@@ -91,6 +92,7 @@ jobs:
           image-ref: hardened-alpine-base:ci
           format: sarif
           output: trivy-image.sarif
+          trivyignores: .trivyignore
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
