@@ -15,4 +15,4 @@
 # Build / CI artifacts
 *.log
 .codeql/
-.secrets
+.trivy-cache/

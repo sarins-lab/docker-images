@@ -47,10 +47,10 @@
 
 # ── Base image pinning ────────────────────────────────────────────────────────
 # H-005 TODO: replace with pinned digest after first pull:
-#   docker pull alpine:3.22.1
-#   docker inspect --format='{{index .RepoDigests 0}}' alpine:3.22.1
+#   docker pull alpine:3.22.4
+#   docker inspect --format='{{index .RepoDigests 0}}' alpine:3.22.4
 # Example: FROM alpine@sha256:<digest>
-ARG ALPINE_VERSION=3.22.1
+ARG ALPINE_VERSION=3.22.4
 FROM alpine:${ALPINE_VERSION}
 ARG ALPINE_VERSION
 
