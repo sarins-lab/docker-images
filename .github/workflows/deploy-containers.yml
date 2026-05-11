@@ -353,7 +353,8 @@ jobs:
 
     # ── Pull request tool validation ──────────────────────────────────────────────
     # PR base image builds are intentionally not pushed to GHCR. Validate tool
-    # Dockerfiles in the same job by loading a local amd64 base image first.
+    # Dockerfiles by pushing the base image to a temporary local registry, then
+    # building tools against that registry reference.
     validate-tools-pr:
         name: Validate tool / ${{ matrix.track }}
         runs-on: ubuntu-latest
@@ -370,15 +371,29 @@ jobs:
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@c47758b77c9736f4b2ef4073d4d51994fabfe349 # v3.7.1
 
-            - name: Build local base image
+            - name: Start local registry
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  docker run -d --restart=always -p 5000:5000 --name local-registry registry:2
+                  for i in {1..20}; do
+                    if curl -fsS http://127.0.0.1:5000/v2/ >/dev/null; then
+                      exit 0
+                    fi
+                    sleep 1
+                  done
+                  echo "Local registry did not become ready in time" >&2
+                  exit 1
+
+            - name: Build and push PR base image to local registry
               uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
               with:
                   context: .
                   file: ${{ matrix.base_dockerfile }}
                   platforms: linux/amd64
-                  load: true
+                  push: true
                   provenance: false
-                  tags: local/${{ matrix.base_image }}:${{ matrix.base_suffix }}
+                  tags: localhost:5000/local/${{ matrix.base_image }}:${{ matrix.base_suffix }}
                   build-args: ${{ matrix.base_build_args }}
 
             - name: Validate tool image build
@@ -390,7 +405,13 @@ jobs:
                   push: false
                   provenance: false
                   build-args: |
-                      BASE_IMAGE=local/${{ matrix.base_image }}:${{ matrix.base_suffix }}
+                      BASE_IMAGE=localhost:5000/local/${{ matrix.base_image }}:${{ matrix.base_suffix }}
+
+            - name: Stop local registry
+              if: always()
+              shell: bash
+              run: |
+                  docker rm -f local-registry 2>/dev/null || true
 
     # ── CVE scanning ─────────────────────────────────────────────────────────────
     # One matrix job per published image — each uses aquasecurity/trivy-action to
@@ -487,7 +508,7 @@ jobs:
             - name: Ensure CVE issue label exists
               run: |
                   gh label create "cve-scan" \
-                    --color "#e11d48" \
+                    --color "e11d48" \
                     --description "Automated Trivy CVE scan failure" \
                     --repo "${{ github.repository }}" 2>/dev/null || true
 
@@ -514,15 +535,16 @@ jobs:
 
                   version       = os.environ['VERSION']
                   repo          = os.environ['GITHUB_REPOSITORY']
-                  run_url       = (os.environ['GITHUB_SERVER_URL'] + '/' + repo +
-                                   '/actions/runs/' + os.environ['GITHUB_RUN_ID'])
+                  server_url    = os.environ['GITHUB_SERVER_URL']
+                  run_url       = f'{server_url}/{repo}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
+                  security_url  = f'{server_url}/{repo}/security/code-scanning'
                   failed_tracks = os.environ.get('FAILED_TRACKS', '').strip()
 
                   lines = [
                       f'## CVE scan failure — `{version}`',
                       '',
                       'Trivy found **HIGH or CRITICAL** unfixed vulnerabilities.',
-                      f'[Workflow run]({run_url}) · [Security tab](../../security/code-scanning)',
+                      f'[Workflow run]({run_url}) · [Security tab]({security_url})',
                       '',
                   ]
                   if failed_tracks:
@@ -547,8 +569,8 @@ jobs:
                   existing = subprocess.run(
                       ['gh', 'issue', 'list', '--repo', repo,
                        '--label', 'cve-scan', '--state', 'open',
-                       '--json', 'number', '--jq', '.[0].number'],
-                      capture_output=True, text=True,
+                       '--json', 'number', '--jq', 'map(.number) | first // empty'],
+                      capture_output=True, text=True, check=True,
                   )
                   existing_num = existing.stdout.strip()
 
@@ -653,3 +675,4 @@ jobs:
                   tag_name: ${{ needs.prepare.outputs.version }}
                   generate_release_notes: true
                   body_path: /tmp/release-body.md
+
