@@ -1,0 +1,3 @@
+# Normalize all text files to LF on commit and checkout.
+# Prevents CRLF noise on Windows/WSL2 working trees.
+* text=auto eol=lf
