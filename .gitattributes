@@ -1,0 +1,27 @@
+# Normalize line endings to LF on commit and checkout.
+# Prevents CRLF noise on Windows/WSL2 working trees.
+# Explicit patterns take precedence over the catch-all below.
+
+# Source and config files
+*.py            text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.md            text eol=lf
+*.txt           text eol=lf
+*.json          text eol=lf
+*.toml          text eol=lf
+*.cfg           text eol=lf
+*.ini           text eol=lf
+*.dockerfile    text eol=lf
+Makefile        text eol=lf
+
+# Git and CI config
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+.dockerignore   text eol=lf
+.trivyignore    text eol=lf
+CODEOWNERS      text eol=lf
+
+# Catch-all: auto-detect remaining text files and normalize to LF
+*               text=auto eol=lf
