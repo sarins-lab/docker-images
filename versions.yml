@@ -6,104 +6,230 @@
 # The CI workflow reads it to generate its build matrices — do not duplicate
 # version information in the workflow file.
 #
+# Structure
+# ---------
+# tracks        — one entry per OS version; each entry declares all artifact
+#                 types to build from that OS via a 'builds' sublist.
+# tool-tracks   — tool images that extend a base OCI image by base-suffix
+#                 reference; not OS versions, so kept as a separate section.
+#
 # Track status lifecycle:
-#   active      — newest release of this OS line; actively developed
-#   maintained  — older release still receiving security patches; still built
-#   deprecated  — EOL approaching; users should migrate; still built but
-#                 flagged in release notes
-#   eol         — past end-of-life; CI stops building; existing GHCR packages
-#                 remain available but receive no new versions
+#   beta        — under validation; built but not yet recommended for production
+#   active      — current recommended release; actively developed and patched
+#   maintained  — older release; security patches only; plan migration
+#   deprecated  — EOL approaching; still built; consumers must migrate
+#   eol         — past end-of-life; CI stops building
 #
-# To sunset a track:
-#   1. Change status to 'eol'.
-#   2. The next release will stop publishing to that tag automatically.
-#   3. Optionally delete the GHCR package versions via the GitHub UI.
+# Lifecycle flow:  beta → active → maintained → deprecated → eol
 #
-# To add a new OS version:
-#   1. Add an entry with status 'active'.
+# builds[].type — artifact type to produce:
+#   oci                — OCI container image (Docker build)
+#   packer-cloud-init  — Generic VM template; no lab secrets; GHCR-safe
+#   packer-discovery   — Lab-specific golden image with mTLS cert; Nexus only
+#
+# builds[].platforms
+#   oci builds:    linux/ prefix required  (e.g. linux/amd64, linux/arm64)
+#   packer builds: no prefix               (e.g. amd64, arm64)
+#   packer-discovery may appear twice per OS (once per platform) because
+#   amd64 produces qcow2 (Proxmox import) and arm64 produces img (SD card).
+#
+# builds[].publish — target registries (list):
+#   ghcr        — GitHub Container Registry  (ghcr.io/sarins-lab/...)
+#   nexus       — Internal Nexus OSS          (nexus.mgt.sarins.info/...)
+#   docker.io   — Docker Hub                  (docker.io/sarinlab/...)
+#   quay.io     — Red Hat Quay                (quay.io/sarinlab/...)
+#
+# builds[].outputs — artifact formats produced (list):
+#   oci         — OCI container image
+#   qcow2       — QEMU/KVM disk image  (Proxmox template import)
+#   img         — Raw disk image       (SD card flash for Pi/SBC)
+#
+# To promote a beta track to active:
+#   1. Change status to 'active'.
 #   2. Bump the previous 'active' entry of the same OS to 'maintained'.
-#   3. Update any tool-track base-suffix references if the new version should
-#      become the canonical base for tool images.
+#   3. Update any tool-track base-suffix references as needed.
+#
+# To add a new OS version under evaluation:
+#   1. Add an entry with status 'beta'.
+#   2. Add only the build types that are ready for testing.
+#   3. Leave the existing 'active' entry unchanged.
 #
 # To change which base a tool image builds on:
 #   1. Update base-suffix in the tool-tracks section.
-#   2. The base-suffix must match a non-eol entry in base-tracks.
+#   2. The base-suffix must match a non-eol tracks entry.
 #      The generate-matrix CI step validates this at build time.
 # =============================================================================
 
-base-tracks:
+tracks:
+  # ── Alpine Linux ─────────────────────────────────────────────────────────────
+  # https://alpinelinux.org/releases/
+  - suffix: alpine321
+    os-version: "3.21"
+    eol: "2026-11-01"
+    status: maintained
+    builds:
+      - type: oci
+        dockerfile: alpine.dockerfile
+        build-arg: ALPINE_VERSION=3.21.7
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7, linux/arm/v6, linux/386]
+        publish: [ghcr]
+        outputs: [oci]
 
-  # Alpine Linux — https://alpinelinux.org/releases/
-  - suffix:     alpine321
-    dockerfile: alpine.dockerfile
-    build-arg:  ALPINE_VERSION=3.21.7
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
-    eol:        "2026-11-01"
-    status:     maintained
+  - suffix: alpine322
+    os-version: "3.22"
+    eol: "2027-05-01"
+    status: active
+    builds:
+      - type: oci
+        dockerfile: alpine.dockerfile
+        build-arg: ALPINE_VERSION=3.22.4
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7, linux/arm/v6, linux/386]
+        publish: [ghcr]
+        outputs: [oci]
 
-  - suffix:     alpine322
-    dockerfile: alpine.dockerfile
-    build-arg:  ALPINE_VERSION=3.22.4
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
-    eol:        "2027-05-01"
-    status:     active
+  # ── Rocky Linux ──────────────────────────────────────────────────────────────
+  # https://rockylinux.org/
+  # Rocky is the RHEL-compatible OS for FreeIPA and SCAP/STIG workloads.
+  # ansible-freeipa is RHEL-native; Dogtag CA subordination tested on RHEL only.
+  - suffix: rocky9
+    os-version: "9"
+    eol: "2032-05-31"
+    status: active
+    builds:
+      - type: oci
+        dockerfile: rocky.dockerfile
+        build-arg: ROCKY_VERSION=9-minimal
+        platforms: [linux/amd64, linux/arm64]
+        publish: [ghcr]
+        outputs: [oci]
+      - type: packer-cloud-init
+        template: packer/rocky-cloud-init.pkr.hcl
+        platforms: [amd64, arm64]
+        publish: [ghcr, nexus]
+        outputs: [oci, qcow2]
+      - type: packer-discovery   # bare-metal x86 and Pi FreeIPA replicas
+        template: packer/discovery.pkr.hcl
+        platforms: [amd64]
+        publish: [nexus]
+        outputs: [qcow2]         # imported as Proxmox template
+      - type: packer-discovery
+        template: packer/discovery.pkr.hcl
+        platforms: [arm64]
+        publish: [nexus]
+        outputs: [img]           # SD card flash — Pi FreeIPA replicas
 
-  # Rocky Linux — https://rockylinux.org/
-  - suffix:     rocky9
-    dockerfile: rocky.dockerfile
-    build-arg:  ROCKY_VERSION=9-minimal
-    platforms:  linux/amd64,linux/arm64
-    eol:        "2032-05-31"
-    status:     maintained
+  - suffix: rocky10
+    os-version: "10"
+    eol: "2035-05-31"
+    status: beta
+    builds:
+      - type: oci
+        dockerfile: rocky.dockerfile
+        build-arg: ROCKY_VERSION=10-minimal
+        platforms: [linux/amd64, linux/arm64]
+        publish: [ghcr]
+        outputs: [oci]
 
-  - suffix:     rocky10
-    dockerfile: rocky.dockerfile
-    build-arg:  ROCKY_VERSION=10-minimal
-    platforms:  linux/amd64,linux/arm64
-    eol:        "2035-05-31"
-    status:     active
-
-  # Debian — https://www.debian.org/releases/
+  # ── Debian ───────────────────────────────────────────────────────────────────
+  # https://www.debian.org/releases/
   # Debian 12 remains maintained while consumers validate Debian 13 migration.
   # Current bookworm packages have unresolved Trivy findings with no fixed
   # package versions available from Debian; reassess before the target EOL.
-  - suffix:     debian12
-    dockerfile: debian.dockerfile
-    build-arg:  DEBIAN_VERSION=12-slim
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
-    eol:        "2026-12-31"
-    status:     maintained
+  - suffix: debian12
+    os-version: "12"
+    eol: "2026-12-31"
+    status: maintained
+    builds:
+      - type: oci
+        dockerfile: debian.dockerfile
+        build-arg: DEBIAN_VERSION=12-slim
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7, linux/386]
+        publish: [ghcr]
+        outputs: [oci]
 
-  - suffix:     debian13
-    dockerfile: debian.dockerfile
-    build-arg:  DEBIAN_VERSION=13-slim
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
-    eol:        "2031-06-30"
-    status:     active
+  - suffix: debian13
+    os-version: "13"
+    eol: "2031-06-30"
+    status: active
+    builds:
+      - type: oci
+        dockerfile: debian.dockerfile
+        build-arg: DEBIAN_VERSION=13-slim
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7, linux/386]
+        publish: [ghcr]
+        outputs: [oci]
 
-  # Ubuntu LTS — https://ubuntu.com/about/release-cycle
-  - suffix:     ubuntu24
-    dockerfile: ubuntu.dockerfile
-    build-arg:  UBUNTU_VERSION=24.04
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7
-    eol:        "2029-05-31"
-    status:     maintained
+  # ── Ubuntu LTS ───────────────────────────────────────────────────────────────
+  # https://ubuntu.com/about/release-cycle
+  # Ubuntu is the primary OS for all non-FreeIPA roles: DNS, DHCP, NetBox,
+  # Forgejo, Jenkins, OpenBao, K3s nodes. AppArmor simplifies container
+  # workloads; cloud-native tooling is Ubuntu-first.
+  - suffix: ubuntu24
+    os-version: "24.04"
+    eol: "2029-05-31"
+    status: active
+    builds:
+      - type: oci
+        dockerfile: ubuntu.dockerfile
+        build-arg: UBUNTU_VERSION=24.04
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7]
+        publish: [ghcr]
+        outputs: [oci]
+      - type: packer-cloud-init
+        template: packer/ubuntu-cloud-init.pkr.hcl
+        platforms: [amd64, arm64]
+        publish: [ghcr, nexus]
+        outputs: [oci, qcow2]
+      - type: packer-discovery   # x86 bare-metal and Pi DNS/DHCP replicas
+        template: packer/discovery.pkr.hcl
+        platforms: [amd64]
+        publish: [nexus]
+        outputs: [qcow2]         # imported as Proxmox template
+      - type: packer-discovery
+        template: packer/discovery.pkr.hcl
+        platforms: [arm64]
+        publish: [nexus]
+        outputs: [img]           # SD card flash — Pi DNS/DHCP replicas
 
-  - suffix:     ubuntu26
-    dockerfile: ubuntu.dockerfile
-    build-arg:  UBUNTU_VERSION=26.04
-    platforms:  linux/amd64,linux/arm64,linux/arm/v7
-    eol:        "2031-05-31"
-    status:     active
+  - suffix: ubuntu26
+    os-version: "26.04"
+    eol: "2031-05-31"
+    status: beta
+    builds:
+      - type: oci
+        dockerfile: ubuntu.dockerfile
+        build-arg: UBUNTU_VERSION=26.04
+        platforms: [linux/amd64, linux/arm64, linux/arm/v7]
+        publish: [ghcr]
+        outputs: [oci]
+
+  # ── Raspbian (Raspberry Pi OS Bookworm) ───────────────────────────────────────
+  # https://www.raspberrypi.com/software/
+  # Packer discovery image only — no OCI base for Raspbian.
+  # Required only when Pi hardware features are needed (GPIO, VideoCore, etc.).
+  # Uses arm-image plugin (customises pre-built image; not an ISO install).
+  - suffix: raspbian12
+    os-version: "12"             # Debian Bookworm base
+    eol: "2026-12-31"
+    status: active
+    builds:
+      - type: packer-discovery
+        template: packer/raspbian-discovery.pkr.hcl
+        platforms: [arm64]
+        publish: [nexus]
+        outputs: [img]           # SD card flash — Pi-specific workloads
 
 tool-tracks:
+  # Tool images extend a hardened OCI base image with specific tooling.
+  # They are not OS versions — base-suffix references a non-eol tracks entry.
+  # Update base-suffix when the canonical base advances to a new version.
 
-  # platform-init-tools — extends hardened-alpine-base with bao, step, curl, jq
-  # base-suffix must match a non-eol alpine entry in base-tracks above.
-  # Update base-suffix when the canonical Alpine base advances to a new version.
-  - track:        init-tools
-    dockerfile:   init-tools.dockerfile
-    base-image:   hardened-alpine-base
-    base-suffix:  alpine322
-    platforms:    linux/amd64,linux/arm64
-    status:       active
+  # platform-init-tools — bao, step, curl, jq on hardened-alpine-base
+  - track: init-tools
+    dockerfile: init-tools.dockerfile
+    base-image: hardened-alpine-base
+    base-suffix: alpine322
+    platforms: [linux/amd64, linux/arm64]
+    status: active
+    publish: [ghcr]
+    outputs: [oci]
