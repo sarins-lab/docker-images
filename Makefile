@@ -16,18 +16,30 @@ TRIVY_IGNORE_UNFIXED ?= true
 TRIVY_EXIT_CODE ?= 0
 TRIVY_IMAGES ?=
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
+DRY_RUN ?=
+_DRY_RUN_FLAG = $(if $(DRY_RUN),--dry-run,)
 
-.PHONY: help build-all build-base build-tools \
+.PHONY: help build-all build-base build-tools build-agents \
 	list-images trivy-images \
+	packer-cloud-init packer-discovery packer-list \
 	act-install act-secrets ci-list ci-dry-run ci-matrix ci-prepare \
 	codeql-actions
 
 help:
 	@echo "Local build targets"
-	@echo "  make build-all      Build all base images and init-tools"
+	@echo "  make build-all      Build all base images, tool images, and agent images"
 	@echo "  make build-base     Build all base image variants"
 	@echo "  make build-tools    Build tool images (depends on base alias tag)"
+	@echo "  make build-agents   Build Jenkins agent images (runner, toolbox, nexus-init)"
 	@echo "  make list-images    Show expected local image tags"
+	@echo ""
+	@echo "Packer targets"
+	@echo "  make packer-cloud-init   Build Ubuntu + Rocky cloud-init VM templates"
+	@echo "  make packer-discovery    Build discovery golden images (requires PKI vars)"
+	@echo "                             ROOT_CA_CERT=<path> DISCOVERY_CERT=<path>"
+	@echo "                             DISCOVERY_KEY=<path> GENIE_ENDPOINT=<url>"
+	@echo "                             DISCOVER_SH=<path>"
+	@echo "  make packer-list         List all Packer tracks from versions.yml"
 	@echo "  make trivy-images   Build live images and write .trivy/results/all-cves.md"
 	@echo ""
 	@echo "Local CI targets (requires: gh cli + Docker Desktop)"
@@ -46,17 +58,52 @@ help:
 	@echo "  VERSION=<tag>       Default: $(VERSION)"
 	@echo "  DOCKER=<binary>     Default: $(DOCKER)"
 	@echo "  PYTHON=<binary>     Default: $(PYTHON)"
+	@echo "  DRY_RUN=1           Print docker build commands without executing them"
 	@echo "  TRIVY_IGNORE_UNFIXED=<bool> Default: $(TRIVY_IGNORE_UNFIXED)"
 	@echo "  TRIVY_EXIT_CODE=<n> Default: $(TRIVY_EXIT_CODE)"
 
-build-all:
-	$(PYTHON) $(IMAGE_SCRIPT) build-all --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)"
+build-all: build-base build-tools build-agents
 
 build-base:
-	$(PYTHON) $(IMAGE_SCRIPT) build-base --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)"
+	$(PYTHON) $(IMAGE_SCRIPT) build-base --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" $(_DRY_RUN_FLAG)
 
 build-tools:
-	$(PYTHON) $(IMAGE_SCRIPT) build-tools --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-dependencies
+	$(PYTHON) $(IMAGE_SCRIPT) build-tools --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-dependencies $(_DRY_RUN_FLAG)
+
+build-agents:
+	$(PYTHON) $(IMAGE_SCRIPT) build-agents --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-dependencies $(_DRY_RUN_FLAG)
+
+packer-cloud-init:
+	@command -v packer >/dev/null 2>&1 || { echo "packer not found in PATH"; exit 127; }
+	packer build -var "output_directory=.packer/output" packer/ubuntu-cloud-init.pkr.hcl
+	packer build -var "output_directory=.packer/output" packer/rocky-cloud-init.pkr.hcl
+
+packer-discovery:
+	@command -v packer >/dev/null 2>&1 || { echo "packer not found in PATH"; exit 127; }
+	@[ -n "$(ROOT_CA_CERT)" ]       || { echo "ROOT_CA_CERT is required"; exit 1; }
+	@[ -n "$(DISCOVERY_CERT)" ]     || { echo "DISCOVERY_CERT is required"; exit 1; }
+	@[ -n "$(DISCOVERY_KEY)" ]      || { echo "DISCOVERY_KEY is required"; exit 1; }
+	@[ -n "$(GENIE_ENDPOINT)" ]     || { echo "GENIE_ENDPOINT is required"; exit 1; }
+	@[ -n "$(DISCOVER_SH)" ]        || { echo "DISCOVER_SH is required"; exit 1; }
+	packer build \
+	  -var "root_ca_cert=$(ROOT_CA_CERT)" \
+	  -var "discovery_enrollment_cert=$(DISCOVERY_CERT)" \
+	  -var "discovery_enrollment_key=$(DISCOVERY_KEY)" \
+	  -var "genie_endpoint=$(GENIE_ENDPOINT)" \
+	  -var "discover_sh=$(DISCOVER_SH)" \
+	  -var "output_directory=.packer/output" \
+	  packer/discovery.pkr.hcl
+
+packer-list:
+	@$(PYTHON) -c "\
+import yaml, sys; \
+data = yaml.safe_load(open('$(VERSIONS_FILE)')); \
+tracks = data.get('tracks', []); \
+print('{:<30} {:<15} {:<10} {}'.format('suffix','type','status','publish')); \
+print('-'*70); \
+[print('{:<30} {:<15} {:<10} {}'.format(t['suffix'], b['type'], t['status'], ','.join(b['publish']))) \
+  for t in tracks for b in t.get('builds',[]) if b['type'].startswith('packer')] \
+"
 
 list-images:
 	@$(PYTHON) $(IMAGE_SCRIPT) images --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --git-sha "$(GIT_SHA)" --include-git-sha-tag

@@ -182,6 +182,64 @@ pipeline {
             }
         }
 
+        stage('Build Agent Images') {
+            steps {
+                script {
+                    def versions  = readYaml(file: env.VERSIONS_FILE)
+                    def filterSet = env.FILTER_LIST
+                        ? env.FILTER_LIST.split(',').collect { it.trim() } as Set : null
+
+                    def baseNames = [:]
+                    versions.tracks.each { track ->
+                        track.builds.each { build ->
+                            if (build.type == 'oci') baseNames[track.suffix] = imageNameFrom(build.dockerfile)
+                        }
+                    }
+
+                    def parallelJobs = [:]
+
+                    versions['agent-tracks'].each { agent ->
+                        if (agent.status in SKIP) return
+                        if (filterSet && !(agent.track in filterSet)) return
+
+                        def a = agent
+
+                        parallelJobs["agent/${a.track}"] = {
+                            def name       = imageNameFrom(a.dockerfile)
+                            def baseSuffix = a['base-suffix']
+                            def firstReg   = a.publish[0]
+                            def baseRef    = org.sarinslab.Registry.ref(firstReg, baseNames[baseSuffix], "${env.BUILD_VERSION}-${baseSuffix}")
+                            def platforms  = a.platforms.join(',')
+                            def tags       = []
+
+                            if (params.DRY_RUN) {
+                                tags << "--tag sarins-lab-local/${name}:dry-run-${a.track}"
+                            } else {
+                                a.publish.each { reg ->
+                                    loginRegistry(reg)
+                                    tags << "--tag ${org.sarinslab.Registry.ref(reg, name, "${env.BUILD_VERSION}-${a.track}")}"
+                                    tags << "--tag ${org.sarinslab.Registry.ref(reg, name, "latest-${a.track}")}"
+                                }
+                            }
+
+                            sh """
+                                docker buildx build \\
+                                  --platform ${platforms} \\
+                                  --build-arg BASE_IMAGE=${baseRef} \\
+                                  ${tags.join(' \\\n                      ')} \\
+                                  ${params.DRY_RUN ? '' : '--push'} \\
+                                  --label org.opencontainers.image.revision=\$(git rev-parse HEAD) \\
+                                  --label org.opencontainers.image.version=${env.BUILD_VERSION} \\
+                                  -f ${a.dockerfile} .
+                            """
+                        }
+                    }
+
+                    parallelJobs ? parallel(parallelJobs) : echo('No agent tracks to build.')
+                }
+            }
+        }
+
         stage('Scan') {
             when {
                 allOf {

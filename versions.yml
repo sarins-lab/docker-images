@@ -233,3 +233,38 @@ tool-tracks:
     status: active
     publish: [ghcr]
     outputs: [oci]
+
+agent-tracks:
+  # Jenkins inbound agent images used by the bootstrap pipeline.
+  # Internal infrastructure only — published to Nexus, never GHCR.
+  # base-image references the hardened OCI base produced by tracks above.
+
+  # runner — Ansible + OpenTofu provisioning agent on hardened-ubuntu-base
+  - track: runner
+    dockerfile: runner.dockerfile
+    base-image: hardened-ubuntu-base
+    base-suffix: ubuntu24
+    platforms: [linux/amd64, linux/arm64]
+    status: active
+    publish: [nexus]
+    outputs: [oci]
+
+  # toolbox — artifact transport, signing, scanning agent on hardened-alpine-base
+  - track: toolbox
+    dockerfile: toolbox.dockerfile
+    base-image: hardened-alpine-base
+    base-suffix: alpine322
+    platforms: [linux/amd64, linux/arm64]
+    status: active
+    publish: [nexus]
+    outputs: [oci]
+
+  # nexus-init — one-shot Nexus bootstrap container (amd64 only)
+  - track: nexus-init
+    dockerfile: nexus-init.dockerfile
+    base-image: hardened-alpine-base
+    base-suffix: alpine322
+    platforms: [linux/amd64]
+    status: active
+    publish: [nexus]
+    outputs: [oci]
