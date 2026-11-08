@@ -212,7 +212,7 @@ jobs:
               run: make test-jenkins PYTHON=python3
 
             - name: Gate Jenkins image vulnerabilities
-              uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.36.0
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
                   image-ref: hardened-jenkins-controller:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.track }}
                   scan-type: image
