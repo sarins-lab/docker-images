@@ -2,3 +2,6 @@
 !*.dockerfile
 !scripts/
 !scripts/cis-harden.sh
+!jenkins/
+!jenkins/entrypoint.sh
+!jenkins/00-controller-hardening.groovy

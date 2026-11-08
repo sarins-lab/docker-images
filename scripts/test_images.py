@@ -1,0 +1,123 @@
+"""Regression tests for the version-driven local and CI image inventory."""
+
+import argparse
+import contextlib
+import io
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import yaml
+
+import images_from_versions as images
+import trivy_images as scans
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+class ImageTests(unittest.TestCase):
+    def setUp(self):
+        self.config = images.load_versions(ROOT / "versions.yml")
+        self.resolver = images.ImageResolver(ROOT)
+
+    def test_every_live_track_is_built_once(self):
+        with patch.object(images, "run_command") as run:
+            images.docker_build_base(self.resolver, self.config["base-tracks"], "docker", "test", True)
+            images.docker_build_tools(self.resolver, self.config, "docker", "test", "", False, True)
+        commands = [call.args[0] for call in run.call_args_list]
+        expected = self.resolver.tags(self.config, "test")
+        self.assertEqual([command[command.index("-t") + 1] for command in commands], expected)
+        self.assertEqual(len(expected), 10)
+        self.assertEqual(len(set(expected)), len(expected))
+        for command in commands:
+            self.assertIn("--pull", command)
+            self.assertIn("--no-cache", command)
+        self.assertEqual(self.config["tool-tracks"], [])
+        self.assertFalse((ROOT / "init-tools.dockerfile").exists())
+
+    def test_eol_tracks_are_skipped(self):
+        self.config["base-tracks"][0]["status"] = "eol"
+        with patch.object(images, "run_command") as run:
+            images.docker_build_base(self.resolver, self.config["base-tracks"], "docker", "test", True)
+        self.assertEqual(run.call_count, 9)
+        self.assertEqual(len(self.resolver.tags(self.config, "test")), 9)
+
+    def test_build_all_respects_flag_override(self):
+        with (
+            patch("sys.argv", ["images", "build-all", "--build-flags="]),
+            patch.object(images, "run_command") as run,
+            contextlib.chdir(ROOT),
+        ):
+            self.assertEqual(images.main(), 0)
+        self.assertEqual(run.call_count, 10)
+        for call in run.call_args_list:
+            self.assertNotIn("--no-cache", call.args[0])
+            self.assertNotIn("--pull", call.args[0])
+
+    def test_workflow_matrices_match_local_inventory(self):
+        for workflow, job, output_key in (
+            ("release.yml", "generate-matrix", "scan-matrix"),
+            ("security.yml", "generate-docker-matrix", "docker-matrix"),
+        ):
+            with self.subTest(workflow=workflow):
+                config = yaml.safe_load((ROOT / ".github/workflows" / workflow).read_text())
+                step = next(step for step in config["jobs"][job]["steps"] if step.get("id") == "gen")
+                script = step["run"].split("\n", 1)[1].rsplit("PYEOF", 1)[0]
+                with (
+                    tempfile.NamedTemporaryFile() as output,
+                    patch.dict(os.environ, {"GITHUB_OUTPUT": output.name}),
+                    contextlib.chdir(ROOT),
+                ):
+                    exec(compile(script, workflow, "exec"), {})
+                    values = dict(line.split("=", 1) for line in Path(output.name).read_text().splitlines())
+                matrix = json.loads(values[output_key])["include"]
+                self.assertEqual(
+                    [entry["track"] for entry in matrix],
+                    [entry["suffix"] for entry in images.live_tracks(self.config["base-tracks"])],
+                )
+                if workflow == "release.yml":
+                    self.assertEqual(values["has-tools"], "false")
+                    self.assertEqual(json.loads(values["tools-matrix"])["include"], [])
+                    jobs = config["jobs"]
+                    self.assertIn("has-tools == 'true'", jobs["publish-tools"]["if"])
+                    self.assertIn("has-tools == 'true'", jobs["validate-tools-pr"]["if"])
+                    self.assertIn("needs.publish-tools.result == 'skipped'", jobs["scan"]["if"])
+                    self.assertIn("always()", jobs["scan"]["if"])
+
+
+class ScanTests(unittest.TestCase):
+    def test_inventory_defaults(self):
+        with patch("sys.argv", ["trivy"]):
+            args = scans.parse_args()
+        self.assertFalse(args.ignore_unfixed)
+        self.assertEqual(args.ignore_file, "/dev/null")
+        self.assertEqual(set(args.severity), set(scans.SEVERITY_ORDER))
+
+    def test_makefile_boolean_arguments(self):
+        for value, expected in (("false", False), ("true", True)):
+            with patch("sys.argv", ["trivy", "--ignore-unfixed", value]):
+                self.assertIs(scans.parse_args().ignore_unfixed, expected)
+        with patch("sys.argv", ["trivy", "--ignore-unfixed"]):
+            self.assertTrue(scans.parse_args().ignore_unfixed)
+        with patch("sys.argv", ["trivy", "--include-unfixed"]):
+            self.assertFalse(scans.parse_args().ignore_unfixed)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            scans.parse_bool("invalid")
+
+    def test_scan_command_does_not_hide_findings(self):
+        with patch("sys.argv", ["trivy"]):
+            args = scans.parse_args()
+        result = unittest.mock.Mock(returncode=0, stderr="", stdout='{"Results": []}')
+        with patch.object(scans.subprocess, "run", return_value=result) as run, contextlib.redirect_stdout(io.StringIO()):
+            scans.run_trivy(args, "test:tag", scans.csv(args.severity), "vuln")
+        command = run.call_args.args[0]
+        self.assertNotIn("--ignore-unfixed", command)
+        self.assertEqual(command[command.index("--ignorefile") + 1], "/dev/null")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -140,12 +141,14 @@ def docker_build_base(
     docker: str,
     version: str,
     dry_run: bool,
+    build_flags: tuple[str, ...] = ("--pull", "--no-cache"),
 ) -> None:
     for track in live_tracks(tracks):
         run_command(
             [
                 docker,
                 "build",
+                *build_flags,
                 "--build-arg",
                 track["build-arg"],
                 "-f",
@@ -166,12 +169,13 @@ def docker_build_tools(
     git_sha: str,
     build_dependencies: bool,
     dry_run: bool,
+    build_flags: tuple[str, ...] = ("--pull", "--no-cache"),
 ) -> None:
     base_by_suffix = {track["suffix"]: track for track in live_tracks(config["base-tracks"])}
 
     if build_dependencies:
         suffixes = {track["base-suffix"] for track in live_tracks(config["tool-tracks"])}
-        docker_build_base(resolver, [base_by_suffix[suffix] for suffix in sorted(suffixes)], docker, version, dry_run)
+        docker_build_base(resolver, [base_by_suffix[suffix] for suffix in sorted(suffixes)], docker, version, dry_run, build_flags)
 
     for track in live_tracks(config["tool-tracks"]):
         tag_args = ["-t", resolver.tool_tag(track, version)]
@@ -182,6 +186,7 @@ def docker_build_tools(
             [
                 docker,
                 "build",
+                *build_flags,
                 "--build-arg",
                 f"BASE_IMAGE={track['base-image']}:{version}-{track['base-suffix']}",
                 "-f",
@@ -199,6 +204,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--versions-file", default="versions.yml")
     parser.add_argument("--version", default="1.0.0")
     parser.add_argument("--docker", default="docker")
+    parser.add_argument("--build-flags", default="--pull --no-cache")
     parser.add_argument("--git-sha", default=os.environ.get("GIT_SHA", ""))
     parser.add_argument("--include-git-sha-tag", action="store_true")
     parser.add_argument("--build-dependencies", action="store_true")
@@ -212,6 +218,7 @@ def main() -> int:
     root = Path.cwd()
     config = load_versions(root / args.versions_file)
     resolver = ImageResolver(root)
+    build_flags = tuple(shlex.split(args.build_flags))
 
     if args.command == "images":
         images = resolver.tags(config, args.version, args.git_sha, args.include_git_sha_tag)
@@ -219,7 +226,7 @@ def main() -> int:
         return 0
 
     if args.command == "build-base":
-        docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run)
+        docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run, build_flags)
         return 0
 
     if args.command == "build-tools":
@@ -231,11 +238,12 @@ def main() -> int:
             args.git_sha,
             args.build_dependencies,
             args.dry_run,
+            build_flags,
         )
         return 0
 
-    docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run)
-    docker_build_tools(resolver, config, args.docker, args.version, args.git_sha, False, args.dry_run)
+    docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run, build_flags)
+    docker_build_tools(resolver, config, args.docker, args.version, args.git_sha, False, args.dry_run, build_flags)
     return 0
 
 

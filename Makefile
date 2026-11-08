@@ -1,6 +1,7 @@
 SHELL := /usr/bin/env bash
 
 DOCKER ?= docker
+BUILD_FLAGS ?= --pull --no-cache
 PYTHON ?= python
 VERSION ?= 1.0.0
 VERSIONS_FILE ?= versions.yml
@@ -9,25 +10,30 @@ TRIVY_SCRIPT ?= scripts/trivy_images.py
 TRIVY ?= trivy
 TRIVY_CACHE_DIR ?= .trivy-cache
 TRIVY_RESULTS_DIR ?= .trivy/results
-TRIVY_IGNOREFILE ?= .trivyignore
+TRIVY_IGNOREFILE ?= /dev/null
 TRIVY_SEVERITY ?= UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
 TRIVY_SCANNERS ?= vuln
-TRIVY_IGNORE_UNFIXED ?= true
+TRIVY_IGNORE_UNFIXED ?= false
 TRIVY_EXIT_CODE ?= 0
 TRIVY_IMAGES ?=
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
+JENKINS_TRACK ?= jenkins-lts-alpine-jdk25
+JENKINS_IMAGE ?= hardened-jenkins-controller:$(VERSION)-$(JENKINS_TRACK)
+JENKINS_BUILD_FLAGS ?= --pull --no-cache
 
 .PHONY: help build-all build-base build-tools \
-	list-images trivy-images \
+	list-images trivy-images build-jenkins test-jenkins test-images \
 	act-install act-secrets ci-list ci-dry-run ci-matrix ci-prepare \
 	codeql-actions
 
 help:
 	@echo "Local build targets"
-	@echo "  make build-all      Build all base images and init-tools"
+	@echo "  make build-all      Build every live track in versions.yml"
 	@echo "  make build-base     Build all base image variants"
 	@echo "  make build-tools    Build tool images (depends on base alias tag)"
 	@echo "  make list-images    Show expected local image tags"
+	@echo "  make test-images    Test inventory, build flags and scan arguments"
+	@echo "  make test-jenkins   Build Jenkins and test hardened startup and restart"
 	@echo "  make trivy-images   Build live images and write .trivy/results/all-cves.md"
 	@echo ""
 	@echo "Local CI targets (requires: gh cli + Docker Desktop)"
@@ -45,18 +51,30 @@ help:
 	@echo "Variables"
 	@echo "  VERSION=<tag>       Default: $(VERSION)"
 	@echo "  DOCKER=<binary>     Default: $(DOCKER)"
+	@echo "  BUILD_FLAGS=<flags> Default: $(BUILD_FLAGS)"
 	@echo "  PYTHON=<binary>     Default: $(PYTHON)"
+	@echo "  JENKINS_TRACK=<suffix> Default: $(JENKINS_TRACK)"
 	@echo "  TRIVY_IGNORE_UNFIXED=<bool> Default: $(TRIVY_IGNORE_UNFIXED)"
 	@echo "  TRIVY_EXIT_CODE=<n> Default: $(TRIVY_EXIT_CODE)"
 
 build-all:
-	$(PYTHON) $(IMAGE_SCRIPT) build-all --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)"
+	$(PYTHON) $(IMAGE_SCRIPT) build-all --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-flags="$(BUILD_FLAGS)"
+
+test-images:
+	$(PYTHON) -m unittest discover -s scripts -p 'test_images.py'
+
+build-jenkins:
+	@set -eu; arg=$$($(PYTHON) -c 'from pathlib import Path; from scripts.images_from_versions import load_versions; print(next(t["build-arg"] for t in load_versions(Path("$(VERSIONS_FILE)"))["base-tracks"] if t["suffix"] == "$(JENKINS_TRACK)" and t["dockerfile"] == "jenkins.dockerfile" and t["status"] != "eol"))'); \
+	$(DOCKER) build $(JENKINS_BUILD_FLAGS) --build-arg "$$arg" -f jenkins.dockerfile -t "$(JENKINS_IMAGE)" .
+
+test-jenkins: build-jenkins
+	DOCKER="$(DOCKER)" bash scripts/test-jenkins.sh "$(JENKINS_IMAGE)"
 
 build-base:
-	$(PYTHON) $(IMAGE_SCRIPT) build-base --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)"
+	$(PYTHON) $(IMAGE_SCRIPT) build-base --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --build-flags="$(BUILD_FLAGS)"
 
 build-tools:
-	$(PYTHON) $(IMAGE_SCRIPT) build-tools --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-dependencies
+	$(PYTHON) $(IMAGE_SCRIPT) build-tools --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --docker "$(DOCKER)" --git-sha "$(GIT_SHA)" --build-dependencies --build-flags="$(BUILD_FLAGS)"
 
 list-images:
 	@$(PYTHON) $(IMAGE_SCRIPT) images --versions-file "$(VERSIONS_FILE)" --version "$(VERSION)" --git-sha "$(GIT_SHA)" --include-git-sha-tag

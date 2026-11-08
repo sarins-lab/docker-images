@@ -25,7 +25,12 @@ TRIVYIGNORE_EXPIRES_PATTERN = re.compile(r"\bexpires:\s*(\d{4}-\d{2}-\d{2})\b")
 def parse_bool(value: str | bool) -> bool:
     if isinstance(value, bool):
         return value
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Expected a Boolean value, got {value!r}")
 
 
 def csv(value: list[str] | str) -> str:
@@ -318,10 +323,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trivy", default="trivy")
     parser.add_argument("--cache-dir", default=".trivy-cache")
     parser.add_argument("--results-dir", default=".trivy/results")
-    parser.add_argument("--ignore-file", default=".trivyignore")
+    parser.add_argument("--ignore-file", default="/dev/null")
     parser.add_argument("--severity", nargs="*", default=["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"])
     parser.add_argument("--scanners", nargs="*", default=["vuln"])
-    parser.add_argument("--ignore-unfixed", dest="ignore_unfixed", action="store_true", default=True)
+    parser.add_argument("--ignore-unfixed", type=parse_bool, nargs="?", const=True, default=False)
     parser.add_argument("--include-unfixed", dest="ignore_unfixed", action="store_false")
     parser.add_argument("--exit-code", type=int, default=0)
     return parser.parse_args()
