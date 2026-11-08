@@ -6,29 +6,42 @@ All released images are scanned for CVE vulnerabilities using Trivy at build tim
 
 | Track             | Base OS      | Status     | Support Level                                     |
 | ----------------- | ------------ | ---------- | ------------------------------------------------- |
-| `alpine322`       | Alpine 3.22  | active     | :white_check_mark: Security patches published     |
-| `alpine321`       | Alpine 3.21  | maintained | :white_check_mark: Security patches published     |
+| `alpine324`       | Alpine 3.24  | active     | :white_check_mark: Security patches published     |
+| `alpine322`       | Alpine 3.22  | maintained | :white_check_mark: Security patches published     |
+| `alpine321`       | Alpine 3.21  | eol        | :x: Not built; existing GHCR packages unsupported |
 | `ubuntu26`        | Ubuntu 26.04 | active     | :white_check_mark: Security patches published     |
 | `ubuntu24`        | Ubuntu 24.04 | maintained | :white_check_mark: Security patches published     |
 | `debian13`        | Debian 13    | active     | :white_check_mark: Security patches published     |
 | `debian12`        | Debian 12    | maintained | :white_check_mark: Security patches published     |
 | `rocky10`         | Rocky 10     | active     | :white_check_mark: Security patches published     |
-| `rocky9`          | Rocky 9      | maintained | :white_check_mark: Security patches published     |
-| `init-tools`      | Alpine 3.22  | active     | :white_check_mark: Security patches published     |
-| deprecated tracks | \*           | deprecated | :warning: No longer published; EOL approaching    |
+| `rocky9`          | Rocky 9      | active     | :white_check_mark: Security patches published     |
+| `jenkins-lts-jdk25` | Debian / JDK 25 | active | :white_check_mark: Available upstream patches applied |
+| `jenkins-lts-alpine-jdk25` | Alpine / JDK 25 | active | :white_check_mark: Available upstream patches applied |
+| deprecated tracks | \*           | deprecated | :warning: Still published; migrate before EOL     |
 | eol tracks        | \*           | eol        | :x: Not built; existing GHCR packages unsupported |
 
 **Authoritative source**: See [`versions.yml`](versions.yml) for track status, EOL dates, and exact OS versions.
+
+Only `status: eol` excludes a track from local builds, scan inventories and CI
+publishing. The `eol` date is informational; it does not automatically change
+status. Existing local images and GHCR versions are not deleted.
 
 ## Vulnerability Scanning
 
 All container images undergo automated CVE scanning:
 
-- **Build-time scanning**: Trivy scans all images during CI/CD (`.github/workflows/deploy-containers.yml`)
+- **Build-time scanning**: Trivy scans every live track in `.github/workflows/security.yml`; fixable HIGH/CRITICAL findings fail the gate.
 - **Release scanning**: Published GHCR images are scanned for HIGH and CRITICAL vulnerabilities
 - **CVE reporting**: Critical findings trigger GitHub Security Advisories and issues
-- **Dependency controls**: Downloaded tool binaries are SHA-verified; base images and distro packages come from official upstream sources and are scanned by Trivy
+- **Dependency controls**: Base images and distro packages come from official upstream sources and are scanned by Trivy. Jenkins upstream images are digest-pinned.
 - **Distro patches**: Base OS updates via official upstream packages (Alpine, Rocky, Debian, Ubuntu)
+
+Local `make trivy-images` rebuilds all live tracks with `--pull --no-cache`
+and inventories all severities, including unfixed findings, without suppressions.
+Reports are written under `.trivy/results/` and are not committed.
+No available vendor fix is not the same as no vulnerability; keep unresolved
+findings visible and evaluate them before deployment. Specialized deployment
+tool images are no longer built or published by this repository.
 
 ## Reporting a Vulnerability
 

@@ -61,6 +61,8 @@ LABEL org.opencontainers.image.title="hardened-alpine-base" \
     org.opencontainers.image.vendor="sarins-lab" \
     org.opencontainers.image.base.name="alpine:${ALPINE_VERSION}"
 
+RUN apk upgrade --no-cache
+
 # ── CIS hardening ─────────────────────────────────────────────────────────────
 # scripts/cis-harden.sh auto-detects Alpine (via /etc/os-release) and applies:
 #   DI-4.1  Creates dedicated non-root user: hermes (uid/gid 10001)

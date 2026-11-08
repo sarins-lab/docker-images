@@ -22,16 +22,22 @@
 # To add a new OS version:
 #   1. Add an entry with status 'active'.
 #   2. Bump the previous 'active' entry of the same OS to 'maintained'.
-#   3. Update any tool-track base-suffix references if the new version should
-#      become the canonical base for tool images.
-#
-# To change which base a tool image builds on:
-#   1. Update base-suffix in the tool-tracks section.
-#   2. The base-suffix must match a non-eol entry in base-tracks.
-#      The generate-matrix CI step validates this at build time.
 # =============================================================================
 
 base-tracks:
+
+  # Independent upstream application images use the same build/publish matrix.
+  - suffix:     jenkins-lts-jdk25
+    dockerfile: jenkins.dockerfile
+    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-jdk25@sha256:595b46fe0d82d1dedb9a5681adfb6e709c8e51598a76ad9fcfe23e6eca98280e
+    platforms:  linux/amd64,linux/arm64
+    status:     active
+  
+  - suffix:     jenkins-lts-alpine-jdk25
+    dockerfile: jenkins.dockerfile
+    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-alpine-jdk25@sha256:b48233b241ff2b7baa90f129d1c075c22f85d38b0bf5da16e47a61146f649076
+    platforms:  linux/amd64,linux/arm64
+    status:     active
 
   # Alpine Linux — https://alpinelinux.org/releases/
   - suffix:     alpine321
@@ -39,13 +45,20 @@ base-tracks:
     build-arg:  ALPINE_VERSION=3.21.7
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2026-11-01"
-    status:     maintained
+    status:     eol
 
   - suffix:     alpine322
     dockerfile: alpine.dockerfile
     build-arg:  ALPINE_VERSION=3.22.4
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2027-05-01"
+    status:     maintained
+
+  - suffix:     alpine324
+    dockerfile: alpine.dockerfile
+    build-arg:  ALPINE_VERSION=3.24.4
+    platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
+    eol:        "2028-06-01"
     status:     active
 
   # Rocky Linux — https://rockylinux.org/
@@ -54,7 +67,7 @@ base-tracks:
     build-arg:  ROCKY_VERSION=9-minimal
     platforms:  linux/amd64,linux/arm64
     eol:        "2032-05-31"
-    status:     maintained
+    status:     active
 
   - suffix:     rocky10
     dockerfile: rocky.dockerfile
@@ -96,14 +109,5 @@ base-tracks:
     eol:        "2031-05-31"
     status:     active
 
-tool-tracks:
-
-  # platform-init-tools — extends hardened-alpine-base with bao, step, curl, jq
-  # base-suffix must match a non-eol alpine entry in base-tracks above.
-  # Update base-suffix when the canonical Alpine base advances to a new version.
-  - track:        init-tools
-    dockerfile:   init-tools.dockerfile
-    base-image:   hardened-alpine-base
-    base-suffix:  alpine322
-    platforms:    linux/amd64,linux/arm64
-    status:       active
+# Specialized deployment images are maintained privately, not published here.
+tool-tracks: []

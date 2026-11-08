@@ -173,11 +173,17 @@ jobs:
           set -euo pipefail
 
           if [ "${{ matrix.kind }}" = "base" ]; then
-            docker build --build-arg "${{ matrix.build_args }}" -f "${{ matrix.dockerfile }}" -t "${{ matrix.tag }}" .
+            docker build --pull --no-cache --build-arg "${{ matrix.build_args }}" -f "${{ matrix.dockerfile }}" -t "${{ matrix.tag }}" .
           else
             docker build --build-arg "${{ matrix.base_build_args }}" -f "${{ matrix.base_dockerfile }}" -t "scan/base/${{ matrix.base_suffix }}:scan" .
             docker build --build-arg BASE_IMAGE=scan/base/${{ matrix.base_suffix }}:scan -f "${{ matrix.dockerfile }}" -t "${{ matrix.tag }}" .
           fi
+
+      - name: Smoke-test Jenkins controller
+        if: matrix.dockerfile == 'jenkins.dockerfile'
+        env:
+          JENKINS_IMAGE: ${{ matrix.tag }}
+        run: bash scripts/test-jenkins.sh "$JENKINS_IMAGE"
 
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@v0.36.0
@@ -196,3 +202,14 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-${{ matrix.track }}
+
+      - name: Gate fixable image vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.tag }}
+          scanners: vuln
+          format: table
+          trivyignores: .trivyignore
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
