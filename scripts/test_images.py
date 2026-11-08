@@ -90,6 +90,26 @@ class ImageTests(unittest.TestCase):
 
 
 class ScanTests(unittest.TestCase):
+    def test_workflow_trivy_version_and_gates(self):
+        for workflow, expected_scans in (("release.yml", 3), ("security.yml", 3)):
+            with self.subTest(workflow=workflow):
+                config = yaml.safe_load((ROOT / ".github/workflows" / workflow).read_text())
+                steps = [
+                    step
+                    for job in config["jobs"].values()
+                    for step in job.get("steps", [])
+                    if step.get("uses", "").startswith("aquasecurity/trivy-action@")
+                ]
+                self.assertEqual(len(steps), expected_scans)
+                for step in steps:
+                    inputs = step["with"]
+                    self.assertEqual(inputs["version"], "v0.76.2")
+                    self.assertEqual(inputs["severity"], "HIGH,CRITICAL")
+                    self.assertTrue(inputs["ignore-unfixed"])
+                    self.assertEqual(inputs["trivyignores"], ".trivyignore")
+                    if inputs.get("format") == "table":
+                        self.assertEqual(inputs["exit-code"], "1")
+
     def test_inventory_defaults(self):
         with patch("sys.argv", ["trivy"]):
             args = scans.parse_args()

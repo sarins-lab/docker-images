@@ -69,6 +69,7 @@ jobs:
       - name: Scan repository configuration and filesystem
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           scan-type: fs
           format: sarif
           output: trivy-fs.sarif
@@ -188,6 +189,7 @@ jobs:
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ matrix.tag }}
           format: sarif
           output: trivy-image.sarif
@@ -206,6 +208,7 @@ jobs:
       - name: Gate fixable image vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ matrix.tag }}
           scanners: vuln
           format: table
