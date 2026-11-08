@@ -29,13 +29,13 @@ base-tracks:
   # Independent upstream application images use the same build/publish matrix.
   - suffix:     jenkins-lts-jdk25
     dockerfile: jenkins.dockerfile
-    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.580.2-jdk25@sha256:415ab90d4e3b25148f7191bc04f455a20817d6c4c3b0a98f6c6b0da4877f7081
+    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-jdk25@sha256:595b46fe0d82d1dedb9a5681adfb6e709c8e51598a76ad9fcfe23e6eca98280e
     platforms:  linux/amd64,linux/arm64
     status:     active
   
   - suffix:     jenkins-lts-alpine-jdk25
     dockerfile: jenkins.dockerfile
-    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.580.2-alpine-jdk25@sha256:74731d9267926f04f914f1d668f67c3ab95fed533ff741d443c304050eedc867
+    build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-alpine-jdk25@sha256:b48233b241ff2b7baa90f129d1c075c22f85d38b0bf5da16e47a61146f649076
     platforms:  linux/amd64,linux/arm64
     status:     active
 
