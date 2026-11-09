@@ -1,5 +1,5 @@
 # =============================================================================
-# platform-base-ubuntu — CIS-hardened Ubuntu base image (version by build arg)
+# sg-ubuntu — CIS-hardened Ubuntu base image (version by build arg)
 # =============================================================================
 # A minimal Ubuntu LTS image with CIS Docker Benchmark v1.6 hardening applied.
 # Intended as a base layer for platform init containers that require apt,
@@ -35,20 +35,20 @@
 # Single-arch (development):
 #   docker build --build-arg UBUNTU_VERSION=24.04 \
 #     -f ubuntu.dockerfile \
-#     -t hardened-ubuntu-base:1.0.0-ubuntu24 \
+#     -t sg-ubuntu:1.0.0-ubuntu24 \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     --build-arg UBUNTU_VERSION=24.04 \
 #     -f ubuntu.dockerfile \
-#     -t <registry>/hardened-ubuntu-base:1.0.0-ubuntu24 \
+#     -t <registry>/sg-ubuntu:1.0.0-ubuntu24 \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/platform-base-ubuntu:24.04
+#     <registry>/sg-ubuntu:1.0.0-ubuntu24
 # Use this digest in derived FROM lines and in values.yaml.
 # Also pin the Ubuntu base image (replace ubuntu:24.04 with @sha256:<digest>).
 # =============================================================================
@@ -61,7 +61,7 @@ FROM ubuntu:${UBUNTU_VERSION}
 ARG UBUNTU_VERSION
 
 # OCI image labels — enables SBOM tooling (Syft, Trivy) and supply-chain auditing.
-LABEL org.opencontainers.image.title="hardened-ubuntu-base" \
+LABEL org.opencontainers.image.title="sg-ubuntu" \
     org.opencontainers.image.description="CIS-hardened Ubuntu ${UBUNTU_VERSION} base: hermes non-root user, SUID/SGID stripped" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \

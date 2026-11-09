@@ -30,7 +30,7 @@ FROM scratch
 COPY --from=hardened / /
 ARG JENKINS_IMAGE
 
-LABEL org.opencontainers.image.title="hardened-jenkins-controller" \
+LABEL org.opencontainers.image.title="sg-jenkins" \
     org.opencontainers.image.description="Jenkins LTS controller: non-root, no controller executors, CSRF protection, WebSocket agents" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \

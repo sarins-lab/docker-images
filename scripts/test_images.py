@@ -5,6 +5,8 @@ import contextlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +47,44 @@ class ImageTests(unittest.TestCase):
             images.docker_build_base(self.resolver, self.config["base-tracks"], "docker", "test", True)
         self.assertEqual(run.call_count, 9)
         self.assertEqual(len(self.resolver.tags(self.config, "test")), 9)
+
+    def test_alpine_versions_have_distinct_named_tags(self):
+        tracks = {
+            track["suffix"]: track
+            for track in images.live_tracks(self.config["base-tracks"])
+        }
+        for suffix, upstream in (("alpine322", "3.22"), ("alpine324", "3.24")):
+            with self.subTest(track=suffix):
+                self.assertTrue(tracks[suffix]["build-arg"].startswith(f"ALPINE_VERSION={upstream}."))
+                self.assertEqual(
+                    self.resolver.base_tag(tracks[suffix], "1.2.3"),
+                    f"sg-alpine:1.2.3-{suffix}",
+                )
+
+    def test_jenkins_build_and_release_scan_use_inventory_name(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+        gate = next(
+            step for step in workflow["jobs"]["validate-jenkins"]["steps"]
+            if step.get("name") == "Gate Jenkins image vulnerabilities"
+        )
+        for track in images.live_tracks(self.config["base-tracks"]):
+            if track["dockerfile"] != "jenkins.dockerfile":
+                continue
+            with self.subTest(track=track["suffix"]):
+                expected = self.resolver.base_tag(track, "1.2.3")
+                result = subprocess.run(
+                    [
+                        "make", "-n", "test-jenkins", f"PYTHON={sys.executable}",
+                        "VERSION=1.2.3", f"JENKINS_TRACK={track['suffix']}",
+                    ],
+                    cwd=ROOT, check=True, capture_output=True, text=True,
+                )
+                self.assertIn(f'-t "{expected}"', result.stdout)
+                self.assertIn(f'bash scripts/test-jenkins.sh "{expected}"', result.stdout)
+                scan_ref = gate["with"]["image-ref"].replace(
+                    "${{ needs.prepare.outputs.version_no_v }}", "1.2.3",
+                ).replace("${{ matrix.track }}", track["suffix"])
+                self.assertEqual(scan_ref, expected)
 
     def test_build_all_respects_flag_override(self):
         with (
