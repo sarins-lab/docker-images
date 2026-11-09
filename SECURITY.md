@@ -13,7 +13,7 @@ All released images are scanned for CVE vulnerabilities using Trivy at build tim
 | `ubuntu24`        | Ubuntu 24.04 | maintained | :white_check_mark: Security patches published     |
 | `debian13`        | Debian 13    | active     | :white_check_mark: Security patches published     |
 | `debian12`        | Debian 12    | maintained | :white_check_mark: Security patches published     |
-| `rocky10`         | Rocky 10     | active     | :white_check_mark: Security patches published     |
+| `rocky10`         | Rocky 10.2   | active     | :white_check_mark: Security patches published     |
 | `rocky9`          | Rocky 9      | active     | :white_check_mark: Security patches published     |
 | `jenkins-lts-jdk25` | Debian / JDK 25 | active | :white_check_mark: Available upstream patches applied |
 | `jenkins-lts-alpine-jdk25` | Alpine / JDK 25 | active | :white_check_mark: Available upstream patches applied |
@@ -22,9 +22,13 @@ All released images are scanned for CVE vulnerabilities using Trivy at build tim
 
 **Authoritative source**: See [`versions.yml`](versions.yml) for track status, EOL dates, and exact OS versions.
 
-Only `status: eol` excludes a track from local builds, scan inventories and CI
-publishing. The `eol` date is informational; it does not automatically change
-status. Existing local images and GHCR versions are not deleted.
+Only `status: eol` excludes a track from local builds and scan inventories.
+Every non-EOL track is published by the standard release workflow with a tag
+in the form `<upstream-version>-cis<version>`, using the top-level version in
+`versions.yml`. Pushes to `main` publish mutable `-dev` tags for validation;
+release tags publish the stable tag without the `-dev` suffix.
+The `eol` date is informational; it does not automatically change status.
+Existing local images and GHCR versions are not deleted.
 
 ## Vulnerability Scanning
 
@@ -57,7 +61,7 @@ If you discover a security vulnerability in these container images:
 
 When using these images:
 
-- Always pin to a specific **tag** (`v1.0.0-alpine322`), never use `latest`
+- Always pin to a specific **tag** (`9.8-cis<version>`), never use `latest`
 - Pull from **versioned releases** published to GHCR, not from development branches
 - Scan your derived images regularly with Trivy: `trivy image ghcr.io/<owner>/<image>:<tag>`
 - Review [`scripts/cis-harden.sh`](scripts/cis-harden.sh) to understand hardening applied (CIS Docker Benchmark v1.6)

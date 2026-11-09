@@ -317,7 +317,7 @@ def run_trivy(args: argparse.Namespace, image: str, severity: str, scanners: str
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--versions-file", default="versions.yml")
-    parser.add_argument("--version", default="1.0.0")
+    parser.add_argument("--version")
     parser.add_argument("--git-sha", default=os.environ.get("GIT_SHA", ""))
     parser.add_argument("--images", nargs="*")
     parser.add_argument("--trivy", default="trivy")
@@ -348,7 +348,8 @@ def main() -> int:
         images = args.images
     else:
         config = load_versions(Path(args.versions_file))
-        images = ImageResolver(Path.cwd()).tags(config, args.version, args.git_sha, False)
+        version = args.version or config["version"]
+        images = ImageResolver(Path.cwd()).tags(config, version, args.git_sha, False)
 
     if not images:
         raise ValueError("No images were provided for Trivy scanning")

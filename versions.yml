@@ -22,7 +22,12 @@
 # To add a new OS version:
 #   1. Add an entry with status 'active'.
 #   2. Bump the previous 'active' entry of the same OS to 'maintained'.
+# Increment the top-level version for each release. The workflow uses it as
+# the CIS version in every published tag and requires pushed release tags to match.
+# image-version records the upstream version in each published tag.
 # =============================================================================
+
+version: "1.0.0"
 
 base-tracks:
 
@@ -30,12 +35,14 @@ base-tracks:
   - suffix:     jenkins-lts-jdk25
     dockerfile: jenkins.dockerfile
     build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-jdk25@sha256:595b46fe0d82d1dedb9a5681adfb6e709c8e51598a76ad9fcfe23e6eca98280e
+    image-version: "2.589-jdk25"
     platforms:  linux/amd64,linux/arm64
     status:     active
-  
+
   - suffix:     jenkins-lts-alpine-jdk25
     dockerfile: jenkins.dockerfile
     build-arg:  JENKINS_IMAGE=jenkins/jenkins:2.589-alpine-jdk25@sha256:b48233b241ff2b7baa90f129d1c075c22f85d38b0bf5da16e47a61146f649076
+    image-version: "2.589-alpine-jdk25"
     platforms:  linux/amd64,linux/arm64
     status:     active
 
@@ -43,6 +50,7 @@ base-tracks:
   - suffix:     alpine321
     dockerfile: alpine.dockerfile
     build-arg:  ALPINE_VERSION=3.21.7
+    image-version: "3.21.7"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2026-11-01"
     status:     eol
@@ -50,6 +58,7 @@ base-tracks:
   - suffix:     alpine322
     dockerfile: alpine.dockerfile
     build-arg:  ALPINE_VERSION=3.22.4
+    image-version: "3.22.4"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2027-05-01"
     status:     maintained
@@ -57,6 +66,7 @@ base-tracks:
   - suffix:     alpine324
     dockerfile: alpine.dockerfile
     build-arg:  ALPINE_VERSION=3.24.4
+    image-version: "3.24.4"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386
     eol:        "2028-06-01"
     status:     active
@@ -64,14 +74,16 @@ base-tracks:
   # Rocky Linux — https://rockylinux.org/
   - suffix:     rocky9
     dockerfile: rocky.dockerfile
-    build-arg:  ROCKY_VERSION=9-minimal
+    build-arg:  ROCKY_VERSION=9.8-minimal@sha256:e1d0a9f5ed99d52e7faf03afe7ee32e48b231c4dd9586808b3d1aedf894dff04
+    image-version: "9.8"
     platforms:  linux/amd64,linux/arm64
     eol:        "2032-05-31"
     status:     active
 
   - suffix:     rocky10
     dockerfile: rocky.dockerfile
-    build-arg:  ROCKY_VERSION=10-minimal
+    build-arg:  ROCKY_VERSION=10.2-minimal
+    image-version: "10.2"
     platforms:  linux/amd64,linux/arm64
     eol:        "2035-05-31"
     status:     active
@@ -83,6 +95,7 @@ base-tracks:
   - suffix:     debian12
     dockerfile: debian.dockerfile
     build-arg:  DEBIAN_VERSION=12-slim
+    image-version: "12"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
     eol:        "2026-12-31"
     status:     maintained
@@ -90,6 +103,7 @@ base-tracks:
   - suffix:     debian13
     dockerfile: debian.dockerfile
     build-arg:  DEBIAN_VERSION=13-slim
+    image-version: "13"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7,linux/386
     eol:        "2031-06-30"
     status:     active
@@ -98,6 +112,7 @@ base-tracks:
   - suffix:     ubuntu24
     dockerfile: ubuntu.dockerfile
     build-arg:  UBUNTU_VERSION=24.04
+    image-version: "24.04"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7
     eol:        "2029-05-31"
     status:     maintained
@@ -105,6 +120,7 @@ base-tracks:
   - suffix:     ubuntu26
     dockerfile: ubuntu.dockerfile
     build-arg:  UBUNTU_VERSION=26.04
+    image-version: "26.04"
     platforms:  linux/amd64,linux/arm64,linux/arm/v7
     eol:        "2031-05-31"
     status:     active

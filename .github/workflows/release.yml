@@ -2,17 +2,14 @@ name: Deploy Container Releases
 
 on:
     push:
+        branches:
+            - main
         tags:
             - "v*"
     pull_request:
         branches:
             - main
-    workflow_dispatch:
-        inputs:
-            version:
-                description: "Release version (example: v1.0.0)"
-                required: true
-                type: string
+    workflow_dispatch: {}
 
 # Minimal permissions at workflow level; each job elevates only what it needs.
 permissions:
@@ -37,35 +34,49 @@ jobs:
         outputs:
             version: ${{ steps.meta.outputs.version }}
             version_no_v: ${{ steps.meta.outputs.version_no_v }}
+            tag_suffix: ${{ steps.meta.outputs.tag_suffix }}
             owner_lower: ${{ steps.meta.outputs.owner_lower }}
         steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+            - name: Install Python dependencies
+              run: python3 -m pip install --disable-pip-version-check pyyaml
+
             - name: Compute release metadata
               id: meta
               shell: bash
               run: |
                   set -euo pipefail
+                  python3 - <<'PY'
+                  import os
+                  import sys
+                  from pathlib import Path
 
-                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-                    version="${{ inputs.version }}"
-                  elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-                    version="v0.0.0-pr-${{ github.event.pull_request.number }}"
-                  else
-                    version="${GITHUB_REF_NAME}"
-                  fi
+                  from scripts.images_from_versions import load_versions
 
-                  # Strict semver: vMAJOR.MINOR.PATCH with optional pre-release segment.
-                  # Rejects arbitrary strings that only start with 'v'.
-                  if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
-                    echo "ERROR: version must be vMAJOR.MINOR.PATCH[-prerelease] (got: ${version})" >&2
-                    exit 1
-                  fi
+                  version_no_v = load_versions(Path("versions.yml"))["version"]
 
-                  owner_lower="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-                  version_no_v="${version#v}"
+                  version = f"v{version_no_v}"
+                  event_name = os.environ["GITHUB_EVENT_NAME"]
+                  ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+                  if event_name == "push" and ref_type == "tag" and os.environ["GITHUB_REF_NAME"] != version:
+                      print(
+                          f"ERROR: pushed tag {os.environ['GITHUB_REF_NAME']!r} does not match "
+                          f"versions.yml version {version!r}",
+                          file=sys.stderr,
+                      )
+                      raise SystemExit(1)
+                  tag_suffix = "-dev" if event_name == "push" and ref_type == "branch" else ""
 
-                  echo "version=${version}"           >> "$GITHUB_OUTPUT"
-                  echo "version_no_v=${version_no_v}" >> "$GITHUB_OUTPUT"
-                  echo "owner_lower=${owner_lower}"   >> "$GITHUB_OUTPUT"
+                  with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                      output.write(f"version={version}\n")
+                      output.write(f"version_no_v={version_no_v}\n")
+                      output.write(f"tag_suffix={tag_suffix}\n")
+                      output.write(
+                          f"owner_lower={os.environ['GITHUB_REPOSITORY_OWNER'].lower()}\n"
+                      )
+                  PY
 
     # ── Matrix generation ─────────────────────────────────────────────────────────
     # Reads versions.yml and emits JSON matrices consumed by publish-base,
@@ -139,7 +150,7 @@ jobs:
                           'dockerfile': t['dockerfile'],
                           'build_args': t['build-arg'],
                           'platforms':  t['platforms'],
-                          'tag_suffix': t['suffix'],
+                          'image_version': t['image-version'],
                           'status':     t['status'],
                       }
                       for t in v['base-tracks']
@@ -150,9 +161,10 @@ jobs:
                       {
                           'track':       t['track'],
                           'dockerfile':  t['dockerfile'],
-                          'tag_suffix':  t.get('tag-suffix', ''),
+                          'image_version': t['image-version'],
                           'base_image':  t['base-image'],
                           'base_suffix': t['base-suffix'],
+                          'base_image_version': live_bases[t['base-suffix']]['image-version'],
                           'base_dockerfile': live_bases[t['base-suffix']]['dockerfile'],
                           'base_build_args': live_bases[t['base-suffix']]['build-arg'],
                           'platforms':   t['platforms'],
@@ -171,7 +183,7 @@ jobs:
                       scan.append({
                           'track':      t['suffix'],
                           'image_name': cached_name(t['dockerfile']),
-                          'tag_suffix': t['suffix'],
+                          'image_version': t['image-version'],
                       })
                   for t in v['tool-tracks']:
                       if t['status'] == 'eol':
@@ -179,7 +191,7 @@ jobs:
                       scan.append({
                           'track':      t['track'],
                           'image_name': cached_name(t['dockerfile']),
-                          'tag_suffix': t.get('tag-suffix', ''),
+                          'image_version': t['image-version'],
                       })
 
                   with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
@@ -207,7 +219,7 @@ jobs:
 
             - name: Build and smoke-test Jenkins
               env:
-                  VERSION: ${{ needs.prepare.outputs.version_no_v }}
+                  VERSION: ${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
                   JENKINS_TRACK: ${{ matrix.track }}
               run: make test-jenkins PYTHON=python3
 
@@ -215,7 +227,7 @@ jobs:
               uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
                   version: v0.76.2
-                  image-ref: sg-jenkins:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.track }}
+                  image-ref: sg-jenkins:${{ matrix.image_version }}-cis${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
                   scan-type: image
                   format: table
                   trivyignores: .trivyignore
@@ -273,13 +285,12 @@ jobs:
               run: |
                   set -euo pipefail
                   image="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ steps.image_name.outputs.image_name }}"
-                  version="${{ needs.prepare.outputs.version }}"
                   version_no_v="${{ needs.prepare.outputs.version_no_v }}"
-                  suffix="${{ matrix.tag_suffix }}"
+                  tag_suffix="${{ needs.prepare.outputs.tag_suffix }}"
+                  image_version="${{ matrix.image_version }}"
                   {
                     echo "tags<<EOF"
-                    echo "${image}:${version}-${suffix}"
-                    echo "${image}:${version_no_v}-${suffix}"
+                    echo "${image}:${image_version}-cis${version_no_v}${tag_suffix}"
                     echo "EOF"
                   } >> "$GITHUB_OUTPUT"
 
@@ -298,7 +309,7 @@ jobs:
                   labels: |
                       org.opencontainers.image.revision=${{ github.sha }}
                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-                      org.opencontainers.image.version=${{ needs.prepare.outputs.version_no_v }}
+                      org.opencontainers.image.version=${{ matrix.image_version }}-cis${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
 
     # ── Tool images ───────────────────────────────────────────────────────────────
     # Tool images layer on top of a published base image and must run after
@@ -352,27 +363,14 @@ jobs:
               run: |
                   set -euo pipefail
                   image="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ steps.image_name.outputs.image_name }}"
-                  version="${{ needs.prepare.outputs.version }}"
                   version_no_v="${{ needs.prepare.outputs.version_no_v }}"
-                  sha_tag="sha-${GITHUB_SHA:0:12}"
-                  suffix="${{ matrix.tag_suffix }}"
-                  if [[ -n "$suffix" ]]; then
-                    {
-                      echo "tags<<EOF"
-                      echo "${image}:${version}-${suffix}"
-                      echo "${image}:${version_no_v}-${suffix}"
-                      echo "${image}:${sha_tag}-${suffix}"
-                      echo "EOF"
-                    } >> "$GITHUB_OUTPUT"
-                  else
-                    {
-                      echo "tags<<EOF"
-                      echo "${image}:${version}"
-                      echo "${image}:${version_no_v}"
-                      echo "${image}:${sha_tag}"
-                      echo "EOF"
-                    } >> "$GITHUB_OUTPUT"
-                  fi
+                  tag_suffix="${{ needs.prepare.outputs.tag_suffix }}"
+                  image_version="${{ matrix.image_version }}"
+                  {
+                    echo "tags<<EOF"
+                    echo "${image}:${image_version}-cis${version_no_v}${tag_suffix}"
+                    echo "EOF"
+                  } >> "$GITHUB_OUTPUT"
 
             - name: Build and push
               uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # v6.9.0
@@ -384,12 +382,12 @@ jobs:
                   provenance: false
                   tags: ${{ steps.tags.outputs.tags }}
                   build-args: |
-                      BASE_IMAGE=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.base_suffix }}
+                      BASE_IMAGE=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ matrix.base_image_version }}-cis${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
                   labels: |
                       org.opencontainers.image.revision=${{ github.sha }}
                       org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-                      org.opencontainers.image.version=${{ needs.prepare.outputs.version_no_v }}
-                      org.opencontainers.image.base.name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.base_suffix }}
+                      org.opencontainers.image.version=${{ matrix.image_version }}-cis${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
+                      org.opencontainers.image.base.name=${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.base_image }}:${{ matrix.base_image_version }}-cis${{ needs.prepare.outputs.version_no_v }}${{ needs.prepare.outputs.tag_suffix }}
 
     # ── Pull request tool validation ──────────────────────────────────────────────
     # PR base image builds are intentionally not pushed to GHCR. Validate tool
@@ -555,14 +553,11 @@ jobs:
               shell: bash
               run: |
                   set -euo pipefail
-                  suffix="${{ matrix.tag_suffix }}"
                   base="${{ env.REGISTRY }}/${{ needs.prepare.outputs.owner_lower }}/${{ matrix.image_name }}"
                   ver="${{ needs.prepare.outputs.version_no_v }}"
-                  if [[ -n "${suffix}" ]]; then
-                    echo "image=${base}:${ver}-${suffix}" >> "$GITHUB_OUTPUT"
-                  else
-                    echo "image=${base}:${ver}" >> "$GITHUB_OUTPUT"
-                  fi
+                  tag_suffix="${{ needs.prepare.outputs.tag_suffix }}"
+                  image_version="${{ matrix.image_version }}"
+                  echo "image=${base}:${image_version}-cis${ver}${tag_suffix}" >> "$GITHUB_OUTPUT"
 
             - name: Generate Trivy SARIF
               uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.36.0
@@ -713,7 +708,7 @@ jobs:
         name: Create GitHub Release
         runs-on: ubuntu-latest
         needs: [prepare, scan]
-        if: startsWith(needs.prepare.outputs.version, 'v') && github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref_type == 'tag')
         permissions:
             contents: write
         steps:
@@ -766,15 +761,15 @@ jobs:
                       if t['status'] == 'eol':
                           continue
                       img = cached_name(t['dockerfile'])
-                      tag = f'`{reg}/{owner}/{img}:{ver}-{t["suffix"]}`'
+                      tag_value = f'{t["image-version"]}-cis{ver}'
+                      tag = f'`{reg}/{owner}/{img}:{tag_value}`'
                       rows.append(f'| {t["suffix"]} | {tag} | {status_label[t["status"]]} |')
 
                   for t in v['tool-tracks']:
                       if t['status'] == 'eol':
                           continue
                       img    = cached_name(t['dockerfile'])
-                      suffix = t.get('tag-suffix', '')
-                      tag_v  = f'{ver}-{suffix}' if suffix else ver
+                      tag_v  = f'{t["image-version"]}-cis{ver}'
                       tag    = f'`{reg}/{owner}/{img}:{tag_v}`'
                       rows.append(f'| {t["track"]} | {tag} | {status_label[t["status"]]} |')
 

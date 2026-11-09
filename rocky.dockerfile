@@ -1,5 +1,5 @@
 # =============================================================================
-# sg-rocky — CIS-hardened Rocky Linux 9 base image
+# sg-rockylinux — CIS-hardened Rocky Linux 9 base image
 # =============================================================================
 # A minimal Rocky Linux 9 image with CIS Docker Benchmark v1.6 hardening
 # applied. Use this as a base for init containers that require RPM-based
@@ -40,31 +40,29 @@
 # Single-arch (development):
 #   docker build \
 #     -f rocky.dockerfile \
-#     -t sg-rocky:1.0.0-rocky9 \
+#     -t sg-rockylinux:9.8-cis<version> \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -f rocky.dockerfile \
-#     -t <registry>/sg-rocky:1.0.0-rocky9 \
+#     -t <registry>/sg-rockylinux:9.8-cis<version> \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/sg-rocky:1.0.0-rocky9
-# Also pin the Rocky base image (replace rockylinux/rockylinux:9-minimal with @sha256:<digest>).
+#     <registry>/sg-rockylinux:9.8-cis<version>
+# The canonical Rocky 9 track pins its base digest in versions.yml.
 # =============================================================================
 
-# H-005 TODO: replace with pinned digest after first pull:
-#   docker pull rockylinux/rockylinux:9-minimal
-#   docker inspect --format='{{index .RepoDigests 0}}' rockylinux/rockylinux:9-minimal
-ARG ROCKY_VERSION=9-minimal
+# Keep the local default aligned with the canonical rocky9 track in versions.yml.
+ARG ROCKY_VERSION=9.8-minimal@sha256:e1d0a9f5ed99d52e7faf03afe7ee32e48b231c4dd9586808b3d1aedf894dff04
 FROM rockylinux/rockylinux:${ROCKY_VERSION}
 ARG ROCKY_VERSION
 
 # OCI image labels
-LABEL org.opencontainers.image.title="sg-rocky" \
+LABEL org.opencontainers.image.title="sg-rockylinux" \
     org.opencontainers.image.description="CIS-hardened Rocky Linux ${ROCKY_VERSION} base: hermes non-root user, SUID/SGID stripped" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \

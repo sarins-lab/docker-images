@@ -3,8 +3,8 @@ SHELL := /usr/bin/env bash
 DOCKER ?= docker
 BUILD_FLAGS ?= --pull --no-cache
 PYTHON ?= python
-VERSION ?= 1.0.0
 VERSIONS_FILE ?= versions.yml
+VERSION ?= $(shell $(PYTHON) -c 'from pathlib import Path; from scripts.images_from_versions import load_versions; print(load_versions(Path("$(VERSIONS_FILE)"))["version"])')
 IMAGE_SCRIPT ?= scripts/images_from_versions.py
 TRIVY_SCRIPT ?= scripts/trivy_images.py
 TRIVY ?= trivy
@@ -18,7 +18,7 @@ TRIVY_EXIT_CODE ?= 0
 TRIVY_IMAGES ?=
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
 JENKINS_TRACK ?= jenkins-lts-alpine-jdk25
-JENKINS_IMAGE ?= sg-jenkins:$(VERSION)-$(JENKINS_TRACK)
+JENKINS_IMAGE ?= $(shell $(PYTHON) -c 'from pathlib import Path; from scripts.images_from_versions import ImageResolver, load_versions; root = Path("."); config = load_versions(root / "$(VERSIONS_FILE)"); track = next(t for t in config["base-tracks"] if t["suffix"] == "$(JENKINS_TRACK)" and t["dockerfile"] == "jenkins.dockerfile" and t["status"] != "eol"); print(ImageResolver(root).base_tag(track, "$(VERSION)"))')
 JENKINS_BUILD_FLAGS ?= --pull --no-cache
 
 .PHONY: help build-all build-base build-tools \

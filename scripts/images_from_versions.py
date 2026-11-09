@@ -24,6 +24,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by environment setup
 
 
 VALID_STATUSES = {"active", "maintained", "deprecated", "eol"}
+RELEASE_VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?")
 
 
 def load_versions(path: Path) -> dict[str, Any]:
@@ -32,6 +33,9 @@ def load_versions(path: Path) -> dict[str, Any]:
 
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a YAML mapping")
+    version = data.get("version")
+    if not isinstance(version, str) or not RELEASE_VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"{path} must contain a valid version in MAJOR.MINOR.PATCH format")
 
     for section in ("base-tracks", "tool-tracks"):
         if section not in data:
@@ -43,13 +47,14 @@ def load_versions(path: Path) -> dict[str, Any]:
     validate_tracks(
         data["tool-tracks"],
         "tool-tracks",
-        ("track", "dockerfile", "base-image", "base-suffix", "platforms", "status"),
+        ("track", "dockerfile", "image-version", "base-image", "base-suffix", "platforms", "status"),
     )
     validate_tool_references(data)
     return data
 
 
 def validate_tracks(tracks: list[dict[str, Any]], section: str, required: tuple[str, ...]) -> None:
+    image_tags: set[tuple[str, str]] = set()
     for index, track in enumerate(tracks):
         if not isinstance(track, dict):
             raise ValueError(f"{section}[{index}] must be a YAML mapping")
@@ -62,6 +67,17 @@ def validate_tracks(tracks: list[dict[str, Any]], section: str, required: tuple[
                 f"{section}[{index}] has invalid status {status!r}; "
                 f"expected one of {sorted(VALID_STATUSES)}"
             )
+        if section == "base-tracks" and (
+            not isinstance(track.get("image-version"), str)
+            or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", track["image-version"])
+        ):
+            raise ValueError(f"{section}[{index}] has invalid or missing image-version")
+        image_version = track.get("image-version")
+        if image_version:
+            key = (track["dockerfile"], image_version)
+            if key in image_tags:
+                raise ValueError(f"{section}[{index}] duplicates image-version {image_version!r}")
+            image_tags.add(key)
 
 
 def live_tracks(tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -110,11 +126,16 @@ class ImageResolver:
         return self._title_cache[dockerfile]
 
     def base_tag(self, track: dict[str, Any], version: str) -> str:
-        return f"{self.title(track['dockerfile'])}:{version}-{track['suffix']}"
+        release_version = version.removeprefix("v")
+        tag = f"{track['image-version']}-cis{release_version}"
+        return f"{self.title(track['dockerfile'])}:{tag}"
 
     def tool_tag(self, track: dict[str, Any], version: str) -> str:
-        suffix = str(track.get("tag-suffix", "")).strip()
-        tag = f"{version}-{suffix}" if suffix else version
+        release_version = version.removeprefix("v")
+        image_version = track.get("image-version")
+        if not image_version:
+            raise ValueError(f"tool track {track['track']!r} is missing image-version")
+        tag = f"{image_version}-cis{release_version}"
         return f"{self.title(track['dockerfile'])}:{tag}"
 
     def tags(self, config: dict[str, Any], version: str, git_sha: str = "", include_git_sha_tag: bool = False) -> list[str]:
@@ -181,6 +202,7 @@ def docker_build_tools(
         tag_args = ["-t", resolver.tool_tag(track, version)]
         if git_sha:
             tag_args.extend(["-t", f"{resolver.title(track['dockerfile'])}:sha-{git_sha}"])
+        base_tag = resolver.base_tag(base_by_suffix[track["base-suffix"]], version).split(":", 1)[1]
 
         run_command(
             [
@@ -188,7 +210,7 @@ def docker_build_tools(
                 "build",
                 *build_flags,
                 "--build-arg",
-                f"BASE_IMAGE={track['base-image']}:{version}-{track['base-suffix']}",
+                f"BASE_IMAGE={track['base-image']}:{base_tag}",
                 "-f",
                 track["dockerfile"],
                 *tag_args,
@@ -202,7 +224,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("images", "build-base", "build-tools", "build-all"))
     parser.add_argument("--versions-file", default="versions.yml")
-    parser.add_argument("--version", default="1.0.0")
+    parser.add_argument("--version")
     parser.add_argument("--docker", default="docker")
     parser.add_argument("--build-flags", default="--pull --no-cache")
     parser.add_argument("--git-sha", default=os.environ.get("GIT_SHA", ""))
@@ -217,16 +239,17 @@ def main() -> int:
     args = parse_args()
     root = Path.cwd()
     config = load_versions(root / args.versions_file)
+    version = args.version or config["version"]
     resolver = ImageResolver(root)
     build_flags = tuple(shlex.split(args.build_flags))
 
     if args.command == "images":
-        images = resolver.tags(config, args.version, args.git_sha, args.include_git_sha_tag)
+        images = resolver.tags(config, version, args.git_sha, args.include_git_sha_tag)
         print((" ".join(images)) if args.as_argument_string else "\n".join(images))
         return 0
 
     if args.command == "build-base":
-        docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run, build_flags)
+        docker_build_base(resolver, config["base-tracks"], args.docker, version, args.dry_run, build_flags)
         return 0
 
     if args.command == "build-tools":
@@ -234,7 +257,7 @@ def main() -> int:
             resolver,
             config,
             args.docker,
-            args.version,
+            version,
             args.git_sha,
             args.build_dependencies,
             args.dry_run,
@@ -242,8 +265,8 @@ def main() -> int:
         )
         return 0
 
-    docker_build_base(resolver, config["base-tracks"], args.docker, args.version, args.dry_run, build_flags)
-    docker_build_tools(resolver, config, args.docker, args.version, args.git_sha, False, args.dry_run, build_flags)
+    docker_build_base(resolver, config["base-tracks"], args.docker, version, args.dry_run, build_flags)
+    docker_build_tools(resolver, config, args.docker, version, args.git_sha, False, args.dry_run, build_flags)
     return 0
 
 

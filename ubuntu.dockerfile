@@ -35,20 +35,20 @@
 # Single-arch (development):
 #   docker build --build-arg UBUNTU_VERSION=24.04 \
 #     -f ubuntu.dockerfile \
-#     -t sg-ubuntu:1.0.0-ubuntu24 \
+#     -t sg-ubuntu:24.04-cis<version> \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     --build-arg UBUNTU_VERSION=24.04 \
 #     -f ubuntu.dockerfile \
-#     -t <registry>/sg-ubuntu:1.0.0-ubuntu24 \
+#     -t <registry>/sg-ubuntu:24.04-cis<version> \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/sg-ubuntu:1.0.0-ubuntu24
+#     <registry>/sg-ubuntu:24.04-cis<version>
 # Use this digest in derived FROM lines and in values.yaml.
 # Also pin the Ubuntu base image (replace ubuntu:24.04 with @sha256:<digest>).
 # =============================================================================
