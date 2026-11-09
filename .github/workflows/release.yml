@@ -11,6 +11,10 @@ on:
             - main
     workflow_dispatch: {}
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
+
 # Minimal permissions at workflow level; each job elevates only what it needs.
 permissions:
     contents: read
