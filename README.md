@@ -72,7 +72,7 @@ docker run -d --name jenkins \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
   --mount type=volume,source=jenkins-home,destination=/var/jenkins_home \
   -p 127.0.0.1:8080:8080 \
-  sg-jenkins:2.589-alpine-jdk25-cis1.0.0
+  sg-jenkins:2.589-alpine-jdk25-cis0.0.0-test
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 

@@ -164,6 +164,14 @@ class ImageTests(unittest.TestCase):
         for entry, track in zip(scan_matrix, live_tracks):
             self.assertEqual(entry["image_version"], track["image-version"])
 
+    def test_release_runs_are_serialized_per_ref(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+        self.assertEqual(
+            workflow["concurrency"]["group"],
+            "${{ github.workflow }}-${{ github.ref }}",
+        )
+        self.assertFalse(workflow["concurrency"]["cancel-in-progress"])
+
     def test_release_metadata_uses_manifest_version_and_checks_pushed_tag(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
         prepare = workflow["jobs"]["prepare"]["steps"]
@@ -205,7 +213,7 @@ class ImageTests(unittest.TestCase):
                 next(track for track in self.config["base-tracks"] if track["suffix"] == "rocky9"),
                 f"{values['version_no_v']}{values['tag_suffix']}",
             ),
-            "sg-rockylinux:9.8-cis1.0.0-dev",
+            f"sg-rockylinux:9.8-cis{self.config['version']}-dev",
         )
 
         with tempfile.NamedTemporaryFile() as output, patch.dict(
