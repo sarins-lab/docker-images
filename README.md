@@ -43,8 +43,8 @@ make test-jenkins PYTHON=python3 VERSION=0.0.0-test JENKINS_TRACK=jenkins-lts-jd
 ```
 
 The default local track is `jenkins-lts-alpine-jdk25`. The second command tests
-Debian. Both tracks use the same hardened Dockerfile and have independent
-versioned GHCR tags. Release validation smoke-tests and scans both tracks.
+Debian. Both tracks use the same hardened Dockerfile. Routine release validation
+smoke-tests and scans both variants.
 Alpine uses musl rather than glibc; validate native plugins and tooling before
 switching an existing deployment.
 
@@ -58,8 +58,9 @@ and volume afterward. It verifies startup, admin authentication, anonymous acces
 denial, zero controller executors, CSRF rejection of unprotected POST requests,
 file permissions, zero capabilities, read-only root filesystem,
 home persistence, and reapplication of hardening after configuration drift.
-Pull requests and releases run this test and a fixed HIGH/CRITICAL Trivy gate
-before publishing. Security workflow runs also smoke-test Jenkins.
+Pull requests, main-branch development builds, and releases run this test and a
+fixed HIGH/CRITICAL Trivy gate. Pull requests do not publish images. Security
+workflow runs also smoke-test Jenkins.
 
 For a local evaluation, create persistent storage and bind HTTP only to loopback:
 
@@ -71,7 +72,7 @@ docker run -d --name jenkins \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
   --mount type=volume,source=jenkins-home,destination=/var/jenkins_home \
   -p 127.0.0.1:8080:8080 \
-  sg-jenkins:0.0.0-test-jenkins-lts-alpine-jdk25
+  sg-jenkins:2.589-alpine-jdk25-cis1.0.0
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
@@ -135,7 +136,7 @@ For a full local inventory with the existing Trivy tooling:
 
 ```bash
 trivy image --scanners vuln --ignore-unfixed=false \
-  --ignorefile /dev/null sg-jenkins:1.0.0-jenkins-lts-jdk25
+  --ignorefile /dev/null sg-jenkins:2.589-alpine-jdk25-cis1.0.0
 ```
 
 ## Local security checks
@@ -214,18 +215,28 @@ or substitute untested libraries inside the WAR to claim a clean result.
 The full local reports remain under `.trivy/results/`, outside Git.
 These results do not establish vulnerability-free images or verify other architectures.
 
-### Automatic release
+### Pre-release and release tags
 
-Push a version tag to trigger a full multi-arch publish and GitHub Release creation:
+Pull requests build and validate images without publishing them. When a PR is
+merged into `main`, the workflow publishes each non-EOL image with a `-dev`
+suffix, such as `sg-rockylinux:9.8-cis1.0.0-dev`, then scans the published
+images. These `-dev` tags are mutable: each subsequent push to `main` updates
+them for the current manifest version.
+
+For a stable release, set the top-level `version` in [`versions.yml`](versions.yml)
+to the release version, merge that change, then push the matching `v<version>`
+Git tag. For example, with `version: "1.0.0"`:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-### Manual release
-
-Run the **Deploy Container Releases** workflow from GitHub Actions and provide the `version` input (example: `v1.0.0`).
+The release workflow verifies that the pushed tag matches `versions.yml`, then
+publishes stable tags without `-dev`, for example
+`sg-rockylinux:9.8-cis1.0.0`. It scans the images and creates the GitHub Release
+only after the release scan succeeds. You can also manually dispatch the
+workflow to create a stable release from the manifest version.
 
 ## Track lifecycle
 
@@ -265,33 +276,33 @@ declared platforms.
 
 ## Published images
 
-Image names are derived from each Dockerfile's `org.opencontainers.image.title` label.
-Published format: `ghcr.io/<owner>/<image-title>:<version>-<track-suffix>`
+Image names are derived from each Dockerfile's `org.opencontainers.image.title`
+label. Every non-EOL track uses
+`ghcr.io/<owner>/<image-title>:<upstream-version>-cis<version>`.
+The upstream component comes from `image-version` in `versions.yml`; the CIS
+component comes from the top-level `version` in `versions.yml`.
 
 Current non-EOL publishing tracks (see `versions.yml` for lifecycle status and EOL dates):
 
-| Track        | Image                                                      |
-| ------------ | ---------------------------------------------------------- |
-| `alpine322`  | `ghcr.io/<owner>/sg-alpine:<version>-alpine322` |
-| `alpine324`  | `ghcr.io/<owner>/sg-alpine:<version>-alpine324` |
-| `rocky9`     | `ghcr.io/<owner>/sg-rocky:<version>-rocky9`     |
-| `rocky10`    | `ghcr.io/<owner>/sg-rocky:<version>-rocky10`    |
-| `debian12`   | `ghcr.io/<owner>/sg-debian:<version>-debian12`  |
-| `debian13`   | `ghcr.io/<owner>/sg-debian:<version>-debian13`  |
-| `ubuntu24`   | `ghcr.io/<owner>/sg-ubuntu:<version>-ubuntu24`  |
-| `ubuntu26`   | `ghcr.io/<owner>/sg-ubuntu:<version>-ubuntu26`  |
-| `jenkins-lts-jdk25` | `ghcr.io/<owner>/sg-jenkins:<version>-jenkins-lts-jdk25` |
-| `jenkins-lts-alpine-jdk25` | `ghcr.io/<owner>/sg-jenkins:<version>-jenkins-lts-alpine-jdk25` |
+| Track | Image |
+| ----- | ----- |
+| `alpine322` | `ghcr.io/<owner>/sg-alpine:3.22.4-cis<version>` |
+| `alpine324` | `ghcr.io/<owner>/sg-alpine:3.24.4-cis<version>` |
+| `rocky9` | `ghcr.io/<owner>/sg-rockylinux:9.8-cis<version>` |
+| `rocky10` | `ghcr.io/<owner>/sg-rockylinux:10.2-cis<version>` |
+| `debian12` | `ghcr.io/<owner>/sg-debian:12-cis<version>` |
+| `debian13` | `ghcr.io/<owner>/sg-debian:13-cis<version>` |
+| `ubuntu24` | `ghcr.io/<owner>/sg-ubuntu:24.04-cis<version>` |
+| `ubuntu26` | `ghcr.io/<owner>/sg-ubuntu:26.04-cis<version>` |
+| `jenkins-lts-jdk25` | `ghcr.io/<owner>/sg-jenkins:2.589-jdk25-cis<version>` |
+| `jenkins-lts-alpine-jdk25` | `ghcr.io/<owner>/sg-jenkins:2.589-alpine-jdk25-cis<version>` |
 
-Both `v<version>` and `<version>` tag forms are published for each track.
-
-The version identifies this repository's release; the suffix selects the OS or
-application track. For release `v1.2.3`, use
-`ghcr.io/sarins-lab/sg-alpine:1.2.3-alpine322` for Alpine 3.22 or
-`ghcr.io/sarins-lab/sg-alpine:1.2.3-alpine324` for Alpine 3.24.
-These tags remain distinct; no unqualified `latest` tag is published.
+For example, with `version: "1.0.0"`, Rocky Linux stable and development tags
+are `ghcr.io/sarins-lab/sg-rockylinux:9.8-cis1.0.0` and
+`ghcr.io/sarins-lab/sg-rockylinux:9.8-cis1.0.0-dev`.
+No unqualified `latest` tag is published.
 
 The `sg-*` names replace the previous package names. Update consumer image
 references to the new paths; existing packages are not renamed automatically.
-Pushing to `main` runs security checks but does not publish images.
-Publish through a `v*` release tag or manually dispatch the release workflow.
+Deploy stable tags or, for testing only, the mutable `-dev` tags. Pin production
+deployments to the published digest.

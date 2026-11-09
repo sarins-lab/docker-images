@@ -34,20 +34,20 @@
 # Single-arch (development):
 #   docker build --build-arg DEBIAN_VERSION=12-slim \
 #     -f debian.dockerfile \
-#     -t sg-debian:1.0.0-debian12 \
+#     -t sg-debian:12-cis<version> \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     --build-arg DEBIAN_VERSION=12-slim \
 #     -f debian.dockerfile \
-#     -t <registry>/sg-debian:1.0.0-debian12 \
+#     -t <registry>/sg-debian:12-cis<version> \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/sg-debian:1.0.0-debian12
+#     <registry>/sg-debian:12-cis<version>
 # Also pin the Debian base image (replace debian:12-slim with @sha256:<digest>).
 # =============================================================================
 

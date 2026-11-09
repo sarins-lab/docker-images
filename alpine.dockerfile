@@ -30,18 +30,18 @@
 # Single-arch (development):
 #   docker build \
 #     -f alpine.dockerfile \
-#     -t sg-alpine:1.0.0-alpine322 \
+#     -t sg-alpine:3.22.4-cis<version> \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -f alpine.dockerfile \
-#     -t <registry>/sg-alpine:1.0.0-alpine322 \
+#     -t <registry>/sg-alpine:3.22.4-cis<version> \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest and use it in derived Dockerfiles:
-#   docker inspect --format='{{index .RepoDigests 0}}' <registry>/sg-alpine:1.0.0-alpine322
+#   docker inspect --format='{{index .RepoDigests 0}}' <registry>/sg-alpine:3.22.4-cis<version>
 # Also pin the Alpine base image (see comment below).
 # =============================================================================
 
