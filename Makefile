@@ -18,7 +18,7 @@ TRIVY_EXIT_CODE ?= 0
 TRIVY_IMAGES ?=
 GIT_SHA ?= $(shell git rev-parse --short=12 HEAD)
 JENKINS_TRACK ?= jenkins-lts-alpine-jdk25
-JENKINS_IMAGE ?= hardened-jenkins-controller:$(VERSION)-$(JENKINS_TRACK)
+JENKINS_IMAGE ?= sg-jenkins:$(VERSION)-$(JENKINS_TRACK)
 JENKINS_BUILD_FLAGS ?= --pull --no-cache
 
 .PHONY: help build-all build-base build-tools \

@@ -71,7 +71,7 @@ docker run -d --name jenkins \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777 \
   --mount type=volume,source=jenkins-home,destination=/var/jenkins_home \
   -p 127.0.0.1:8080:8080 \
-  hardened-jenkins-controller:0.0.0-test-jenkins-lts-alpine-jdk25
+  sg-jenkins:0.0.0-test-jenkins-lts-alpine-jdk25
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
@@ -135,7 +135,7 @@ For a full local inventory with the existing Trivy tooling:
 
 ```bash
 trivy image --scanners vuln --ignore-unfixed=false \
-  --ignorefile /dev/null hardened-jenkins-controller:1.0.0-jenkins-lts-jdk25
+  --ignorefile /dev/null sg-jenkins:1.0.0-jenkins-lts-jdk25
 ```
 
 ## Local security checks
@@ -272,15 +272,26 @@ Current non-EOL publishing tracks (see `versions.yml` for lifecycle status and E
 
 | Track        | Image                                                      |
 | ------------ | ---------------------------------------------------------- |
-| `alpine322`  | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine322` |
-| `alpine324`  | `ghcr.io/<owner>/hardened-alpine-base:<version>-alpine324` |
-| `rocky9`     | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky9`     |
-| `rocky10`    | `ghcr.io/<owner>/hardened-rocky-base:<version>-rocky10`    |
-| `debian12`   | `ghcr.io/<owner>/hardened-debian-base:<version>-debian12`  |
-| `debian13`   | `ghcr.io/<owner>/hardened-debian-base:<version>-debian13`  |
-| `ubuntu24`   | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu24`  |
-| `ubuntu26`   | `ghcr.io/<owner>/hardened-ubuntu-base:<version>-ubuntu26`  |
-| `jenkins-lts-jdk25` | `ghcr.io/<owner>/hardened-jenkins-controller:<version>-jenkins-lts-jdk25` |
-| `jenkins-lts-alpine-jdk25` | `ghcr.io/<owner>/hardened-jenkins-controller:<version>-jenkins-lts-alpine-jdk25` |
+| `alpine322`  | `ghcr.io/<owner>/sg-alpine:<version>-alpine322` |
+| `alpine324`  | `ghcr.io/<owner>/sg-alpine:<version>-alpine324` |
+| `rocky9`     | `ghcr.io/<owner>/sg-rocky:<version>-rocky9`     |
+| `rocky10`    | `ghcr.io/<owner>/sg-rocky:<version>-rocky10`    |
+| `debian12`   | `ghcr.io/<owner>/sg-debian:<version>-debian12`  |
+| `debian13`   | `ghcr.io/<owner>/sg-debian:<version>-debian13`  |
+| `ubuntu24`   | `ghcr.io/<owner>/sg-ubuntu:<version>-ubuntu24`  |
+| `ubuntu26`   | `ghcr.io/<owner>/sg-ubuntu:<version>-ubuntu26`  |
+| `jenkins-lts-jdk25` | `ghcr.io/<owner>/sg-jenkins:<version>-jenkins-lts-jdk25` |
+| `jenkins-lts-alpine-jdk25` | `ghcr.io/<owner>/sg-jenkins:<version>-jenkins-lts-alpine-jdk25` |
 
 Both `v<version>` and `<version>` tag forms are published for each track.
+
+The version identifies this repository's release; the suffix selects the OS or
+application track. For release `v1.2.3`, use
+`ghcr.io/sarins-lab/sg-alpine:1.2.3-alpine322` for Alpine 3.22 or
+`ghcr.io/sarins-lab/sg-alpine:1.2.3-alpine324` for Alpine 3.24.
+These tags remain distinct; no unqualified `latest` tag is published.
+
+The `sg-*` names replace the previous package names. Update consumer image
+references to the new paths; existing packages are not renamed automatically.
+Pushing to `main` runs security checks but does not publish images.
+Publish through a `v*` release tag or manually dispatch the release workflow.

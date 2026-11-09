@@ -1,5 +1,5 @@
 # =============================================================================
-# platform-base-rocky — CIS-hardened Rocky Linux 9 base image
+# sg-rocky — CIS-hardened Rocky Linux 9 base image
 # =============================================================================
 # A minimal Rocky Linux 9 image with CIS Docker Benchmark v1.6 hardening
 # applied. Use this as a base for init containers that require RPM-based
@@ -40,19 +40,19 @@
 # Single-arch (development):
 #   docker build \
 #     -f rocky.dockerfile \
-#     -t hardened-rocky-base:1.0.0 \
+#     -t sg-rocky:1.0.0-rocky9 \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -f rocky.dockerfile \
-#     -t <registry>/hardened-rocky-base:1.0.0 \
+#     -t <registry>/sg-rocky:1.0.0-rocky9 \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/platform-base-rocky:9
+#     <registry>/sg-rocky:1.0.0-rocky9
 # Also pin the Rocky base image (replace rockylinux/rockylinux:9-minimal with @sha256:<digest>).
 # =============================================================================
 
@@ -64,7 +64,7 @@ FROM rockylinux/rockylinux:${ROCKY_VERSION}
 ARG ROCKY_VERSION
 
 # OCI image labels
-LABEL org.opencontainers.image.title="hardened-rocky-base" \
+LABEL org.opencontainers.image.title="sg-rocky" \
     org.opencontainers.image.description="CIS-hardened Rocky Linux ${ROCKY_VERSION} base: hermes non-root user, SUID/SGID stripped" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \

@@ -215,7 +215,7 @@ jobs:
               uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               with:
                   version: v0.76.2
-                  image-ref: hardened-jenkins-controller:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.track }}
+                  image-ref: sg-jenkins:${{ needs.prepare.outputs.version_no_v }}-${{ matrix.track }}
                   scan-type: image
                   format: table
                   trivyignores: .trivyignore

@@ -1,8 +1,8 @@
 # =============================================================================
-# platform-base-debian — CIS-hardened Debian base image (version by build arg)
+# sg-debian — CIS-hardened Debian base image (version by build arg)
 # =============================================================================
 # A minimal Debian slim image with CIS Docker Benchmark v1.6 hardening applied.
-# Prefer this over platform-base-ubuntu when you want a smaller glibc-based
+# Prefer this over sg-ubuntu when you want a smaller glibc-based
 # image without the Ubuntu-specific additions. The Debian slim variant strips
 # documentation, locales, and some utilities, keeping the image lean.
 #
@@ -34,20 +34,20 @@
 # Single-arch (development):
 #   docker build --build-arg DEBIAN_VERSION=12-slim \
 #     -f debian.dockerfile \
-#     -t hardened-debian-base:1.0.0-debian12 \
+#     -t sg-debian:1.0.0-debian12 \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     --build-arg DEBIAN_VERSION=12-slim \
 #     -f debian.dockerfile \
-#     -t <registry>/hardened-debian-base:1.0.0-debian12 \
+#     -t <registry>/sg-debian:1.0.0-debian12 \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' \
-#     <registry>/platform-base-debian:12
+#     <registry>/sg-debian:1.0.0-debian12
 # Also pin the Debian base image (replace debian:12-slim with @sha256:<digest>).
 # =============================================================================
 
@@ -59,7 +59,7 @@ FROM debian:${DEBIAN_VERSION}
 ARG DEBIAN_VERSION
 
 # OCI image labels
-LABEL org.opencontainers.image.title="hardened-debian-base" \
+LABEL org.opencontainers.image.title="sg-debian" \
     org.opencontainers.image.description="CIS-hardened Debian ${DEBIAN_VERSION} base: hermes non-root user, SUID/SGID stripped" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \

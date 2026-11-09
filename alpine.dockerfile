@@ -1,5 +1,5 @@
 # =============================================================================
-# platform-base — CIS-hardened Alpine base image
+# sg-alpine — CIS-hardened Alpine base image
 # =============================================================================
 # A minimal Alpine image with CIS Docker Benchmark v1.6 hardening applied.
 # Intended as a base layer for any platform init container. Provides:
@@ -30,18 +30,18 @@
 # Single-arch (development):
 #   docker build \
 #     -f alpine.dockerfile \
-#     -t hardened-alpine-base:1.0.0 \
+#     -t sg-alpine:1.0.0-alpine322 \
 #     .
 #
 # Multi-arch (production — requires buildx):
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -f alpine.dockerfile \
-#     -t <registry>/hardened-alpine-base:1.0.0 \
+#     -t <registry>/sg-alpine:1.0.0-alpine322 \
 #     --push .
 #
 # ── H-005 / Digest pinning ────────────────────────────────────────────────────
 # After pushing, capture the immutable digest and use it in derived Dockerfiles:
-#   docker inspect --format='{{index .RepoDigests 0}}' <registry>/platform-base:1.0.0
+#   docker inspect --format='{{index .RepoDigests 0}}' <registry>/sg-alpine:1.0.0-alpine322
 # Also pin the Alpine base image (see comment below).
 # =============================================================================
 
@@ -55,7 +55,7 @@ FROM alpine:${ALPINE_VERSION}
 ARG ALPINE_VERSION
 
 # OCI image labels — enables SBOM tooling (Syft, Trivy) and supply-chain auditing.
-LABEL org.opencontainers.image.title="hardened-alpine-base" \
+LABEL org.opencontainers.image.title="sg-alpine" \
     org.opencontainers.image.description="CIS-hardened Alpine ${ALPINE_VERSION} base: hermes non-root user, SUID/SGID stripped" \
     org.opencontainers.image.source="https://github.com/sarins-lab/docker-images" \
     org.opencontainers.image.vendor="sarins-lab" \
